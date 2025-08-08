@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"flag"
+	"fmt"
 	"image/png"
 	"log"
 	"net/http"
@@ -10,11 +12,14 @@ import (
 )
 
 func main() {
+	port := flag.Int("p", 8080, "port to run the server on")
+	flag.Parse()
+
 	// Call handleScreenshot() when someone visits /screenshot
 	http.HandleFunc("/screenshot", handleScreenshot)
 
-	log.Println("🟢 Server started at http://localhost:8080")
-	err := http.ListenAndServe(":8080", nil)
+	log.Printf("🟢 Server started at http://localhost:%d", *port)
+	err := http.ListenAndServe(fmt.Sprintf(":%d", *port), nil)
 	if err != nil {
 		log.Fatalf("❌ Server failed to start: %v", err)
 	}
