@@ -21,12 +21,14 @@ func main() {
 }
 
 func handleScreenshot(w http.ResponseWriter, r *http.Request) {
+	log.Printf("📸 Received screenshot request from %s", r.RemoteAddr)
 	img, err := screenshot.Capture()
 	if err != nil {
 		log.Printf("❌ Capture failed: %v", err)
 		http.Error(w, "Failed to capture screenshot", http.StatusInternalServerError)
 		return
 	}
+	log.Printf("✅ Screenshot captured successfully for %s", r.RemoteAddr)
 
 	var buf bytes.Buffer // in-mem byte slice
 	err = png.Encode(&buf, img)
