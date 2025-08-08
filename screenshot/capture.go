@@ -13,7 +13,7 @@ import (
 func Capture() (image.Image, error) {
 	numDisplays := screenshot.NumActiveDisplays()
 	if numDisplays == 0 {
-		return nil, fmt.Errorf("No active displays found!")
+		return nil, fmt.Errorf("no active displays found")
 	}
 
 	// Get the bounding rectangle of the first display
@@ -22,7 +22,7 @@ func Capture() (image.Image, error) {
 	// Capture the image within those bounds
 	img, err := screenshot.CaptureRect(bounds)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to capture screen: %w", err)
+		return nil, fmt.Errorf("failed to capture screen: %w", err)
 	}
 
 	return img, nil
