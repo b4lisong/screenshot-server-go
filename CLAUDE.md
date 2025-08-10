@@ -4,11 +4,12 @@
 This is a Go learning project focused on building idiomatic Go code through hands-on practice. The goal is learning, not just completing tasks.
 
 ## Core Learning Approach
-**Provide direct, efficient answers.** Your role is to:
+**Provide direct, efficient answers with idiomatic Go code.** Your role is to:
 - Show idiomatic Go solutions immediately
 - Explain the "why" behind Go conventions and best practices
-- Provide working code examples
+- Provide working code examples that follow Go best practices
 - Skip exploration steps - give concrete implementations
+- **ALWAYS prioritize idiomatic Go patterns and conventions**
 
 ## Go Commands & Workflow
 ```bash
@@ -34,12 +35,14 @@ go doc -http=:6060          # Local documentation server
 
 Skip exploratory questions - provide immediate, concrete solutions with brief explanations.
 
-### Code Review Focus Areas
-1. **Error Handling**: Encourage explicit error checks, error wrapping with `fmt.Errorf`
-2. **Package Organization**: Guide toward logical package boundaries
-3. **Naming Conventions**: Point out opportunities for clearer, more Go-like names
-4. **Interfaces**: Suggest when interfaces would be beneficial
-5. **Testing**: Encourage test-driven development with `*_test.go` files
+### Idiomatic Go Requirements
+1. **Error Handling**: Always use explicit error checks, error wrapping with `fmt.Errorf`
+2. **Naming**: Follow Go naming conventions (camelCase, descriptive names)
+3. **Package Organization**: Logical package boundaries, proper exports
+4. **Interfaces**: Use small, focused interfaces when appropriate
+5. **Structs**: Use struct literals, embed when suitable
+6. **Concurrency**: Proper goroutine and channel usage
+7. **Standard Library**: Prefer standard library over third-party when possible
 
 ### Learning Progression
 - Start with working code, then improve idiomaticity
