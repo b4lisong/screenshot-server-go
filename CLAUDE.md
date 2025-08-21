@@ -76,6 +76,7 @@ Skip exploratory questions - provide immediate, concrete solutions with brief ex
 - **go-code-reviewer**: Use for code review, quality assessment, and idiomaticity checks
 - **go-developer**: Use for implementing Go features, writing Go code, and Go-specific development
 - **feature-requirements-analyst**: Use for analyzing and planning feature requests or bug fixes before development
+- **frontend-js-architect**: Use for frontend JavaScript development, client-side architecture, and connecting to Go backends
 
 ### When to Use Each Agent
 1. **go-git-committer**: Any time you need to:
@@ -102,5 +103,21 @@ Skip exploratory questions - provide immediate, concrete solutions with brief ex
    - Gather requirements and define technical specifications
    - Investigate and analyze bug reports
    - Create comprehensive development plans
+
+5. **frontend-js-architect**: When you need to:
+   - Write or modify JavaScript code for the frontend
+   - Design client-side architecture and patterns
+   - Implement API integration between frontend and Go backend
+   - Refactor frontend code for better organization
+   - Handle DOM manipulation, event handling, and UI interactions
+   - Create or modify HTML templates with JavaScript functionality
+
+## Cross-Agent Collaboration
+**When features involve both frontend and backend:**
+- Use **feature-requirements-analyst** first to analyze the complete requirements
+- Use **go-developer** for backend API design, handlers, and Go-specific implementation
+- Use **frontend-js-architect** for client-side implementation and backend integration
+- Share context between agents by providing relevant details from previous agent outputs
+- Ensure API contracts and data structures are consistent between frontend and backend
 
 **IMPORTANT**: Never perform these specialized tasks directly - always delegate to the appropriate sub-agent.
