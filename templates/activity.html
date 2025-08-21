@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}}</title>
+    <style>
+        /* Minimal CSS for a clean gallery layout */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .info {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .screenshot {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+        }
+        
+        .screenshot:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        .screenshot img {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .screenshot-info {
+            padding: 12px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .screenshot-time {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .screenshot-type {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        
+        .type-auto {
+            background-color: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .type-manual {
+            background-color: #f3e5f5;
+            color: #7b1fa2;
+        }
+        
+        .empty {
+            text-align: center;
+            color: #999;
+            padding: 60px 20px;
+        }
+        
+        .nav {
+            margin-bottom: 20px;
+        }
+        
+        .nav a {
+            color: #1976d2;
+            text-decoration: none;
+            margin-right: 20px;
+        }
+        
+        .nav a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="nav">
+        <a href="/">Home</a>
+        <a href="/screenshot">Capture Screenshot</a>
+    </div>
+
+    <h1>{{.Title}}</h1>
+    <div class="info">
+        Showing the last {{len .Screenshots}} screenshots (maximum 24).
+        Current time: {{.Now.Format "January 2, 2006 3:04:05 PM"}}
+    </div>
+
+    {{if .Screenshots}}
+        <div class="gallery">
+            {{range .Screenshots}}
+                <div class="screenshot">
+                    <a href="/screenshot/{{.ID}}">
+                        <img src="/screenshot/{{.ID}}" alt="Screenshot from {{.CapturedAt.Format "Jan 2, 3:04 PM"}}" loading="lazy">
+                    </a>
+                    <div class="screenshot-info">
+                        <span class="screenshot-time">
+                            {{.CapturedAt.Format "Jan 2, 3:04:05 PM"}}
+                        </span>
+                        <span class="screenshot-type {{if .IsAutomatic}}type-auto{{else}}type-manual{{end}}">
+                            {{if .IsAutomatic}}Automatic{{else}}Manual{{end}}
+                        </span>
+                    </div>
+                </div>
+            {{end}}
+        </div>
+    {{else}}
+        <div class="empty">
+            <p>No screenshots yet.</p>
+            <p>Screenshots will appear here as they are captured automatically or <a href="/screenshot">manually</a>.</p>
+        </div>
+    {{end}}
+</body>
+</html>
