@@ -67,3 +67,32 @@ Skip exploratory questions - provide immediate, concrete solutions with brief ex
 - Focus on HTTP handling, image processing, and error management
 - Provide direct examples from Go's standard library
 - Keep solutions simple and readable
+
+## Sub-Agent Usage Requirements
+**ALWAYS use the appropriate specialized sub-agents for specific tasks:**
+
+### Mandatory Sub-Agent Usage
+- **go-git-committer**: Use for ALL git operations (commits, PRs, git-related tasks)
+- **go-code-reviewer**: Use for code review, quality assessment, and idiomaticity checks
+- **go-developer**: Use for implementing Go features, writing Go code, and Go-specific development
+
+### When to Use Each Agent
+1. **go-git-committer**: Any time you need to:
+   - Create git commits
+   - Write commit messages
+   - Handle git operations
+   - Create pull requests
+   
+2. **go-code-reviewer**: When you need to:
+   - Review Go code for best practices
+   - Check code quality and idiomaticity
+   - Analyze code for improvements
+   - Verify Go conventions
+
+3. **go-developer**: For:
+   - Writing new Go code
+   - Implementing features in Go
+   - Following Go best practices in development
+   - Test-driven development in Go
+
+**IMPORTANT**: Never perform these specialized tasks directly - always delegate to the appropriate sub-agent.
