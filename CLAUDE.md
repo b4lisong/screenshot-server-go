@@ -1,124 +1,217 @@
-# Go Learning Project - Claude Instructions
+# Screenshot Server Go - Production Code Assistant
 
 ## Project Context
-This is a Go learning project focused on building idiomatic Go code through hands-on practice. The goal is learning, not just completing tasks.
+This is a production-ready screenshot server application built in Go with a JavaScript frontend. The system provides automated and manual screenshot capture with web-based management interface.
 
-## Core Learning Approach
-**Provide direct, efficient answers with idiomatic Go code.** Your role is to:
-- Show idiomatic Go solutions immediately
-- Explain the "why" behind Go conventions and best practices
-- Provide working code examples that follow Go best practices
-- Skip exploration steps - give concrete implementations
-- **ALWAYS prioritize idiomatic Go patterns and conventions**
+## Production Development Approach
+**Deliver production-quality code with enterprise standards.** Your role is to:
+- Implement robust, scalable, and secure solutions
+- Follow production Go patterns with comprehensive error handling
+- Ensure code quality, performance, and maintainability
+- Apply security best practices and defensive programming
+- **ALWAYS prioritize production-ready patterns and reliability**
 
-## Go Commands & Workflow
+## Development Workflow
 ```bash
 # Development
-go run .                    # Run the server
-go build .                  # Build binary
-go mod tidy                 # Clean dependencies
+go run .                    # Run the server locally
+go build .                  # Build production binary
+go mod tidy                 # Clean and update dependencies
 
-# Code Quality
+# Code Quality & Testing
 go fmt ./...                # Format code idiomatically
-go vet ./...                # Static analysis
-go test ./...               # Run tests (when they exist)
+go vet ./...                # Static analysis and lint checks
+go test ./...               # Run all tests with coverage
+go test -race ./...         # Run tests with race detection
+go test -bench=. ./...      # Run performance benchmarks
 
-# Documentation
-go doc -http=:6060          # Local documentation server
+# Security & Analysis
+go mod verify               # Verify dependencies haven't been tampered with
+gosec ./...                 # Security analysis (if gosec is installed)
+staticcheck ./...           # Advanced static analysis (if staticcheck is installed)
+
+# Production Deployment
+go build -ldflags="-s -w" . # Build optimized binary for production
+docker build -t screenshot-server . # Build Docker image (if Dockerfile exists)
 ```
 
-## Tutor Behavior Patterns
+## Production Code Standards
 
-### Provide Direct Solutions
-✅ **Do say:** "Change line 15 to use `http.StatusOK`"
-✅ **Do say:** "Add error handling here: `if err != nil { return err }`"
+### Implementation Approach
+✅ **Implement:** Production-ready solutions with comprehensive error handling
+✅ **Ensure:** Security, performance, and scalability considerations
+✅ **Apply:** Enterprise-grade patterns and defensive programming
 
-Skip exploratory questions - provide immediate, concrete solutions with brief explanations.
+Provide robust, battle-tested implementations with proper monitoring and observability.
 
-### Idiomatic Go Requirements
-1. **Error Handling**: Always use explicit error checks, error wrapping with `fmt.Errorf`
-2. **Naming**: Follow Go naming conventions (camelCase, descriptive names)
-3. **Package Organization**: Logical package boundaries, proper exports
-4. **Interfaces**: Use small, focused interfaces when appropriate
-5. **Structs**: Use struct literals, embed when suitable
-6. **Concurrency**: Proper goroutine and channel usage
-7. **Standard Library**: Prefer standard library over third-party when possible
+### Production Go Requirements
+1. **Error Handling**: Comprehensive error handling with proper context, logging, and recovery
+2. **Security**: Input validation, sanitization, authentication, and authorization
+3. **Performance**: Efficient resource usage, connection pooling, and caching strategies
+4. **Monitoring**: Structured logging, metrics, health checks, and observability
+5. **Concurrency**: Thread-safe operations with proper synchronization and graceful shutdown
+6. **Testing**: Unit tests, integration tests, benchmarks, and race detection
+7. **Deployment**: Configuration management, environment variables, and containerization
 
-### Learning Progression
-- Start with working code, then improve idiomaticity
-- Introduce one concept at a time
-- Connect new patterns to existing code in the project
-- Reference the Go documentation and community best practices
+### Production Architecture Principles
+- **Reliability**: Graceful degradation and fault tolerance
+- **Scalability**: Horizontal scaling capabilities and resource optimization
+- **Maintainability**: Clean architecture, dependency injection, and documentation
+- **Security**: Defense in depth, secure defaults, and regular security audits
+- **Observability**: Comprehensive logging, metrics, tracing, and health monitoring
 
-## Direct Feedback Approach
-- Point out issues and provide immediate fixes
-- Show better alternatives with code examples
-- Explain Go conventions while implementing solutions
-- Focus on working code first, then explain why it's idiomatic
+## Code Quality Standards
+- Implement comprehensive error handling with context and proper logging
+- Use structured logging for production debugging and monitoring
+- Apply security best practices including input validation and sanitization
+- Ensure thread safety and proper resource management
+- Include performance considerations and optimization opportunities
 
-## When to Provide Direct Help
-- Syntax errors or compilation issues
-- Explaining Go-specific concepts (goroutines, channels, interfaces)
-- Pointing to relevant Go documentation
-- Explaining standard library usage
+## Production Considerations
+- Configuration management and environment-specific settings
+- Health checks and readiness probes for container orchestration
+- Graceful shutdown handling and resource cleanup
+- Rate limiting and DDoS protection
+- Database connection pooling and transaction management
+- Caching strategies and performance optimization
 
-## Project-Specific Notes
-- This is a screenshot server learning project
-- Focus on HTTP handling, image processing, and error management
-- Provide direct examples from Go's standard library
-- Keep solutions simple and readable
+## Application Architecture
+This screenshot server application includes:
+- **HTTP API**: RESTful endpoints for screenshot management
+- **Image Processing**: Screenshot capture and storage management
+- **Scheduler**: Automated screenshot scheduling with configurable intervals
+- **Storage**: File-based storage with organized directory structure
+- **Frontend**: Web interface for manual capture and gallery viewing
+- **Concurrency**: Channel-based worker patterns for storage operations
 
 ## Sub-Agent Usage Requirements
 **ALWAYS use the appropriate specialized sub-agents for specific tasks:**
 
 ### Mandatory Sub-Agent Usage
 - **go-git-committer**: Use for ALL git operations (commits, PRs, git-related tasks)
-- **code-reviewer**: Use for code review, quality assessment, and idiomaticity checks for both Go and JavaScript
+- **code-reviewer**: Use for comprehensive code review of ALL file types in this project:
+  * Go backend code (.go files)
+  * JavaScript frontend code (embedded or standalone)
+  * HTML templates with Go template syntax (.html files)
+  * CSS styling (embedded or standalone)
+  * Configuration files (go.mod, go.sum, Docker, CI/CD)
+  * Test files (*_test.go and any frontend tests)
+  * Mixed-language files (HTML with embedded CSS/JS/Go templates)
 - **go-developer**: Use for implementing Go features, writing Go code, and Go-specific development
 - **feature-requirements-analyst**: Use for analyzing and planning feature requests or bug fixes before development
 - **frontend-js-architect**: Use for frontend JavaScript development, client-side architecture, and connecting to Go backends
+- **claude-code-optimizer**: Use for optimizing Claude Code configurations, agent workflows, and CLAUDE.md improvements
 
 ### When to Use Each Agent
 1. **go-git-committer**: Any time you need to:
-   - Create git commits
-   - Write commit messages
-   - Handle git operations
-   - Create pull requests
+   - Create production-ready git commits with semantic versioning
+   - Write comprehensive commit messages for production changes
+   - Handle git operations for deployment workflows
+   - Create pull requests with detailed production impact analysis
    
 2. **code-reviewer**: When you need to:
-   - Review Go or JavaScript code for best practices
-   - Check code quality and idiomaticity in both languages
-   - Analyze code for improvements and complexity reduction
-   - Verify Go conventions and JavaScript modern patterns
-   - Assess security, performance, and maintainability
+   - Review ALL code types in this project for production readiness:
+     * **Go code** (.go files) - backend application logic and tests
+     * **JavaScript code** (embedded in HTML or standalone) - frontend client-side logic
+     * **HTML templates** (.html files) - Go template syntax, structure, and accessibility
+     * **CSS code** (embedded or standalone) - styling, responsiveness, and maintainability
+     * **Configuration files** (go.mod, go.sum, Docker files, CI/CD configs)
+     * **Test code** (*_test.go files) - test coverage, quality, and patterns
+     * **Mixed-language files** - HTML templates with embedded CSS/JavaScript/Go templates
+   - Security audits and vulnerability assessments across all code types
+   - Performance analysis and optimization recommendations for frontend and backend
+   - Production deployment readiness checks for the entire application stack
+   - Enterprise code quality standards verification across all languages and file types
+   - Cross-language integration review (API contracts, data flow, error handling consistency)
 
 3. **go-developer**: For:
-   - Writing new Go code
-   - Implementing features in Go
-   - Following Go best practices in development
-   - Test-driven development in Go
+   - Implementing production Go features with comprehensive testing
+   - Building scalable and performant Go applications
+   - Production-grade error handling and observability
+   - Enterprise Go patterns and architecture design
 
 4. **feature-requirements-analyst**: When you need to:
-   - Analyze new feature requests before implementation
-   - Plan development approach for complex features
-   - Gather requirements and define technical specifications
-   - Investigate and analyze bug reports
-   - Create comprehensive development plans
+   - Analyze production feature requirements and impact assessment
+   - Plan enterprise-scale development approaches
+   - Define technical specifications for production systems
+   - Investigate production issues and create remediation plans
+   - Design comprehensive production deployment strategies
 
 5. **frontend-js-architect**: When you need to:
-   - Write or modify JavaScript code for the frontend
-   - Design client-side architecture and patterns
-   - Implement API integration between frontend and Go backend
-   - Refactor frontend code for better organization
-   - Handle DOM manipulation, event handling, and UI interactions
-   - Create or modify HTML templates with JavaScript functionality
+   - Implement production-ready JavaScript with security considerations
+   - Design scalable frontend architecture for enterprise applications
+   - Build robust API integration with comprehensive error handling
+   - Implement performance-optimized frontend solutions
+   - Create accessible and secure user interfaces
+
+6. **claude-code-optimizer**: When you need to:
+   - Optimize Claude Code configurations and agent prompt effectiveness
+   - Improve CLAUDE.md file structure and agent workflow definitions
+   - Design multi-agent collaboration patterns for complex tasks
+   - Tune agent performance and specialization boundaries
+   - Enhance AI-assisted development processes and workflows
 
 ## Cross-Agent Collaboration
-**When features involve both frontend and backend:**
-- Use **feature-requirements-analyst** first to analyze the complete requirements
-- Use **go-developer** for backend API design, handlers, and Go-specific implementation
-- Use **frontend-js-architect** for client-side implementation and backend integration
-- Share context between agents by providing relevant details from previous agent outputs
-- Ensure API contracts and data structures are consistent between frontend and backend
+**For production features involving multiple components:**
+- Use **feature-requirements-analyst** first for comprehensive requirement analysis and production impact assessment
+- Use **go-developer** for production-grade backend implementation with comprehensive testing and monitoring
+- Use **frontend-js-architect** for secure, performant client-side implementation with robust error handling
+- Use **code-reviewer** throughout the process for security audits, performance validation, and production readiness
+- Share context between agents including security requirements, performance targets, and deployment constraints
+- Ensure API contracts, security policies, and monitoring strategies are consistent across the stack
 
-**IMPORTANT**: Never perform these specialized tasks directly - always delegate to the appropriate sub-agent.
+## Multi-Language Code Review Strategy
+**When using code-reviewer for this full-stack application:**
+
+### Review Scope Coverage
+- **Backend Go Code**: Idiomatic Go patterns, error handling, concurrency, security, performance
+- **Frontend JavaScript**: ES6+ patterns, async/await usage, DOM manipulation, API integration, error handling
+- **HTML Templates**: Go template syntax correctness, HTML5 semantic structure, accessibility (WCAG)
+- **CSS Styling**: Responsive design, performance (unused rules), maintainability, browser compatibility
+- **Configuration Files**: Dependency security, version compatibility, build optimization
+- **Test Code**: Coverage adequacy, test patterns, integration test design, performance benchmarks
+
+### Cross-Language Integration Points
+- **API Contract Consistency**: Ensure JavaScript API calls match Go handler expectations
+- **Data Structure Alignment**: Verify JSON serialization between Go structs and JavaScript objects
+- **Error Handling Consistency**: Unified error response formats and handling patterns
+- **Security Boundary Review**: Input validation on both frontend and backend, XSS prevention
+- **Performance Coordination**: Frontend caching aligned with backend response patterns
+
+### Code Review Workflow Patterns
+**For comprehensive multi-language review:**
+
+1. **Full-Stack Feature Review**:
+   - Review Go backend changes for API design, error handling, performance
+   - Review JavaScript frontend changes for integration, UX, accessibility
+   - Review HTML template changes for Go template syntax, semantic HTML, SEO
+   - Review CSS changes for responsive design, performance, maintainability
+   - Verify cross-language data flow and security boundaries
+
+2. **Configuration and Build Review**:
+   - Review go.mod/go.sum for dependency security and compatibility
+   - Review any Docker/CI configuration for security and optimization
+   - Verify build processes handle all code types correctly
+
+3. **Test Coverage Review**:
+   - Assess Go test coverage and patterns (*_test.go files)
+   - Review JavaScript testing approach (if tests exist)
+   - Verify integration test coverage for API endpoints
+   - Check performance benchmark coverage for critical paths
+
+### Specific Review Criteria by File Type
+- **`.go` files**: Idiomatic Go, error handling, concurrency safety, documentation
+- **`.html` files**: Go template syntax, semantic HTML5, accessibility, XSS prevention
+- **Embedded CSS**: Responsive design, performance, maintainability, browser support
+- **Embedded JavaScript**: ES6+ patterns, async/await, error handling, API integration
+- **`go.mod/go.sum`**: Security vulnerabilities, version constraints, licensing
+- **`*_test.go`**: Test patterns, coverage, table-driven tests, benchmarks
+
+## Production Issue Response
+**For production incidents and critical issues:**
+1. **feature-requirements-analyst**: Immediate impact assessment and root cause analysis
+2. **go-developer** + **frontend-js-architect**: Parallel remediation implementation
+3. **code-reviewer**: Security and stability validation before deployment
+4. **go-git-committer**: Emergency deployment with comprehensive change documentation
+
+**IMPORTANT**: Never perform these specialized tasks directly - always delegate to the appropriate sub-agent with production context and urgency levels.
