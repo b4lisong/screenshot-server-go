@@ -73,7 +73,7 @@ Skip exploratory questions - provide immediate, concrete solutions with brief ex
 
 ### Mandatory Sub-Agent Usage
 - **go-git-committer**: Use for ALL git operations (commits, PRs, git-related tasks)
-- **go-code-reviewer**: Use for code review, quality assessment, and idiomaticity checks
+- **code-reviewer**: Use for code review, quality assessment, and idiomaticity checks for both Go and JavaScript
 - **go-developer**: Use for implementing Go features, writing Go code, and Go-specific development
 - **feature-requirements-analyst**: Use for analyzing and planning feature requests or bug fixes before development
 - **frontend-js-architect**: Use for frontend JavaScript development, client-side architecture, and connecting to Go backends
@@ -85,11 +85,12 @@ Skip exploratory questions - provide immediate, concrete solutions with brief ex
    - Handle git operations
    - Create pull requests
    
-2. **go-code-reviewer**: When you need to:
-   - Review Go code for best practices
-   - Check code quality and idiomaticity
-   - Analyze code for improvements
-   - Verify Go conventions
+2. **code-reviewer**: When you need to:
+   - Review Go or JavaScript code for best practices
+   - Check code quality and idiomaticity in both languages
+   - Analyze code for improvements and complexity reduction
+   - Verify Go conventions and JavaScript modern patterns
+   - Assess security, performance, and maintainability
 
 3. **go-developer**: For:
    - Writing new Go code
