@@ -88,7 +88,7 @@ This screenshot server application includes:
 **ALWAYS use the appropriate specialized sub-agents for specific tasks:**
 
 ### Mandatory Sub-Agent Usage
-- **go-git-committer**: Use for ALL git operations (commits, PRs, git-related tasks)
+- **commit-manager**: Use for ALL git operations (commits, PRs, git-related tasks) across multi-language codebases
 - **code-reviewer**: Use for comprehensive code review of ALL file types in this project:
   * Go backend code (.go files)
   * JavaScript frontend code (embedded or standalone)
@@ -103,11 +103,12 @@ This screenshot server application includes:
 - **claude-code-optimizer**: Use for optimizing Claude Code configurations, agent workflows, and CLAUDE.md improvements
 
 ### When to Use Each Agent
-1. **go-git-committer**: Any time you need to:
-   - Create production-ready git commits with semantic versioning
-   - Write comprehensive commit messages for production changes
-   - Handle git operations for deployment workflows
-   - Create pull requests with detailed production impact analysis
+1. **commit-manager**: Any time you need to:
+   - Create production-ready git commits with semantic versioning for multi-language changes
+   - Write comprehensive commit messages covering Go backend, JavaScript frontend, HTML/CSS, and configuration changes
+   - Handle git operations for full-stack deployment workflows
+   - Create pull requests with detailed production impact analysis across the entire application stack
+   - Generate commit messages for cross-language feature implementations
    
 2. **code-reviewer**: When you need to:
    - Review ALL code types in this project for production readiness:
@@ -157,8 +158,17 @@ This screenshot server application includes:
 - Use **go-developer** for production-grade backend implementation with comprehensive testing and monitoring
 - Use **frontend-js-architect** for secure, performant client-side implementation with robust error handling
 - Use **code-reviewer** throughout the process for security audits, performance validation, and production readiness
+- Use **commit-manager** for all version control activities, ensuring commit messages accurately reflect cross-language changes
 - Share context between agents including security requirements, performance targets, and deployment constraints
 - Ensure API contracts, security policies, and monitoring strategies are consistent across the stack
+
+### Enhanced Full-Stack Workflow Pattern
+**Complete Feature Implementation Cycle:**
+1. **feature-requirements-analyst**: Analyze requirements, define API contracts, plan implementation approach
+2. **go-developer**: Implement Go backend with comprehensive error handling and testing
+3. **frontend-js-architect**: Build JavaScript frontend with API integration and user experience design
+4. **code-reviewer**: Review all code types (Go, JavaScript, HTML, CSS) for production readiness
+5. **commit-manager**: Create semantic commits and PR descriptions covering the complete feature stack
 
 ## Multi-Language Code Review Strategy
 **When using code-reviewer for this full-stack application:**
@@ -212,6 +222,6 @@ This screenshot server application includes:
 1. **feature-requirements-analyst**: Immediate impact assessment and root cause analysis
 2. **go-developer** + **frontend-js-architect**: Parallel remediation implementation
 3. **code-reviewer**: Security and stability validation before deployment
-4. **go-git-committer**: Emergency deployment with comprehensive change documentation
+4. **commit-manager**: Emergency deployment with comprehensive change documentation across all affected components
 
 **IMPORTANT**: Never perform these specialized tasks directly - always delegate to the appropriate sub-agent with production context and urgency levels.
