@@ -75,6 +75,7 @@ Skip exploratory questions - provide immediate, concrete solutions with brief ex
 - **go-git-committer**: Use for ALL git operations (commits, PRs, git-related tasks)
 - **go-code-reviewer**: Use for code review, quality assessment, and idiomaticity checks
 - **go-developer**: Use for implementing Go features, writing Go code, and Go-specific development
+- **feature-requirements-analyst**: Use for analyzing and planning feature requests or bug fixes before development
 
 ### When to Use Each Agent
 1. **go-git-committer**: Any time you need to:
@@ -94,5 +95,12 @@ Skip exploratory questions - provide immediate, concrete solutions with brief ex
    - Implementing features in Go
    - Following Go best practices in development
    - Test-driven development in Go
+
+4. **feature-requirements-analyst**: When you need to:
+   - Analyze new feature requests before implementation
+   - Plan development approach for complex features
+   - Gather requirements and define technical specifications
+   - Investigate and analyze bug reports
+   - Create comprehensive development plans
 
 **IMPORTANT**: Never perform these specialized tasks directly - always delegate to the appropriate sub-agent.
