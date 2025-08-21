@@ -312,7 +312,7 @@ func (fs *FileStorage) Save(img image.Image, isAutomatic bool) (*Screenshot, err
 		typeIndicator = "auto"
 	}
 	
-	// Use UnixNano for uniqueness even with rapid captures
+	// Use high precision timestamp for uniqueness even with rapid captures
 	filename := fmt.Sprintf("%s_%s.png", 
 		now.Format("20060102_150405.000000000"), 
 		typeIndicator)
@@ -426,7 +426,7 @@ func (fs *FileStorage) Get(id string) (*Screenshot, error) {
 	}
 
 	if found == nil {
-		return nil, fmt.Errorf("screenshot not found: %s", id)
+		return nil, fmt.Errorf("screenshot with ID %s not found", id)
 	}
 
 	return found, nil
@@ -495,7 +495,7 @@ func (fs *FileStorage) parseScreenshot(path string, info os.FileInfo) (*Screensh
 	parts := strings.Split(filename, "_")
 	
 	if len(parts) < 3 {
-		return nil, fmt.Errorf("invalid filename format: %s", filename)
+		return nil, fmt.Errorf("invalid screenshot filename format %s: expected format YYYYMMDD_HHMMSS.nnnnnnnnn_type", filename)
 	}
 
 	// Parse timestamp from filename
@@ -503,7 +503,7 @@ func (fs *FileStorage) parseScreenshot(path string, info os.FileInfo) (*Screensh
 	timeStr := parts[0] + "_" + parts[1]
 	capturedAt, err := time.Parse("20060102_150405.000000000", timeStr)
 	if err != nil {
-		return nil, fmt.Errorf("parsing timestamp: %w", err)
+		return nil, fmt.Errorf("parsing timestamp %s from filename %s: %w", timeStr, filename, err)
 	}
 
 	// Determine if automatic
@@ -588,6 +588,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -656,8 +657,9 @@ func TestFileStorage_Save(t *testing.T) {
 			}
 
 			// Verify filename contains type indicator
-			if !filepath.Base(screenshot.Path)[:len(filepath.Base(screenshot.Path))-4] {
-				t.Errorf("filename doesn't contain type indicator %s", tt.wantType)
+			filename := filepath.Base(screenshot.Path)
+			if !strings.Contains(filename, tt.wantType) {
+				t.Errorf("filename %s doesn't contain type indicator %s", filename, tt.wantType)
 			}
 		})
 	}
@@ -821,7 +823,7 @@ func (m *Manager) worker() {
 			res = result{err: err}
 			
 		default:
-			res = result{err: fmt.Errorf("unknown operation: %s", cmd.op)}
+			res = result{err: fmt.Errorf("unknown storage operation: %s", cmd.op)}
 		}
 
 		// Send result back through the command's result channel
@@ -910,6 +912,7 @@ Create `scheduler/scheduler.go`:
 package scheduler
 
 import (
+	"fmt"
 	"image"
 	"log"
 	"math/rand"
@@ -957,13 +960,13 @@ func (s *Scheduler) Start() error {
 	defer s.mu.Unlock()
 
 	if s.running {
-		return fmt.Errorf("scheduler already running")
+		return fmt.Errorf("scheduler is already running")
 	}
 
 	s.running = true
 	go s.run()
 	
-	log.Println("📸 Automatic screenshot scheduler started")
+	log.Println("Automatic screenshot scheduler started")
 	return nil
 }
 
@@ -982,7 +985,7 @@ func (s *Scheduler) Stop() {
 	close(s.stop)
 	<-s.stopped
 	
-	log.Println("📸 Automatic screenshot scheduler stopped")
+	log.Println("Automatic screenshot scheduler stopped")
 }
 
 // run is the main scheduler loop.
@@ -999,7 +1002,7 @@ func (s *Scheduler) run() {
 	timer := time.NewTimer(time.Until(next))
 	defer timer.Stop()
 
-	log.Printf("📸 Next automatic screenshot scheduled for %s", next.Format("15:04:05"))
+	log.Printf("Next automatic screenshot scheduled for %s", next.Format("15:04:05"))
 
 	for {
 		select {
@@ -1010,7 +1013,7 @@ func (s *Scheduler) run() {
 			// Schedule next capture
 			next = s.calculateNextCapture(time.Now())
 			timer.Reset(time.Until(next))
-			log.Printf("📸 Next automatic screenshot scheduled for %s", next.Format("15:04:05"))
+			log.Printf("Next automatic screenshot scheduled for %s", next.Format("15:04:05"))
 			
 		case <-s.stop:
 			// Graceful shutdown requested
@@ -1045,22 +1048,22 @@ func (s *Scheduler) calculateNextCapture(now time.Time) time.Time {
 // captureScreenshot performs the actual screenshot capture and save.
 // Errors are logged but don't stop the scheduler.
 func (s *Scheduler) captureScreenshot() {
-	log.Println("📸 Capturing automatic screenshot...")
+	log.Println("Capturing automatic screenshot...")
 	
 	// Capture
 	img, err := s.capture()
 	if err != nil {
-		log.Printf("❌ Failed to capture automatic screenshot: %v", err)
+		log.Printf("Failed to capture automatic screenshot: %v", err)
 		return
 	}
 	
 	// Save
 	if err := s.save(img, true); err != nil {
-		log.Printf("❌ Failed to save automatic screenshot: %v", err)
+		log.Printf("Failed to save automatic screenshot: %v", err)
 		return
 	}
 	
-	log.Println("✅ Automatic screenshot captured and saved")
+	log.Println("Automatic screenshot captured and saved")
 }
 
 // IsRunning returns whether the scheduler is currently active.
@@ -1225,7 +1228,7 @@ func main() {
 	// Initialize storage
 	fileStorage, err := storage.NewFileStorage(*storageDir)
 	if err != nil {
-		log.Fatalf("❌ Failed to initialize storage: %v", err)
+		log.Fatalf("Failed to initialize storage: %v", err)
 	}
 	
 	// Create manager for thread-safe operations
@@ -1235,7 +1238,7 @@ func main() {
 	// Parse templates
 	templates, err = template.ParseGlob("templates/*.html")
 	if err != nil {
-		log.Fatalf("❌ Failed to parse templates: %v", err)
+		log.Fatalf("Failed to parse templates: %v", err)
 	}
 
 	// Start automatic screenshot scheduler
@@ -1244,7 +1247,7 @@ func main() {
 		return err
 	})
 	if err := sched.Start(); err != nil {
-		log.Fatalf("❌ Failed to start scheduler: %v", err)
+		log.Fatalf("Failed to start scheduler: %v", err)
 	}
 	defer sched.Stop()
 
@@ -1256,23 +1259,23 @@ func main() {
 	http.HandleFunc("/activity", handleActivity)
 	http.HandleFunc("/screenshot/", handleScreenshotImage)
 
-	log.Printf("🟢 Server started at http://localhost:%d", *port)
-	log.Printf("📸 View activity at http://localhost:%d/activity", *port)
+	log.Printf("Server started at http://localhost:%d", *port)
+	log.Printf("View activity at http://localhost:%d/activity", *port)
 	
 	err = http.ListenAndServe(fmt.Sprintf(":%d", *port), nil)
 	if err != nil {
-		log.Fatalf("❌ Server failed to start: %v", err)
+		log.Fatalf("Server failed to start: %v", err)
 	}
 }
 
 // handleScreenshot captures and returns a screenshot (existing functionality).
 func handleScreenshot(w http.ResponseWriter, r *http.Request) {
-	log.Printf("📸 Received screenshot request from %s", r.RemoteAddr)
+	log.Printf("Received screenshot request from %s", r.RemoteAddr)
 	
 	// Capture screenshot
 	img, err := screenshot.Capture()
 	if err != nil {
-		log.Printf("❌ Capture failed: %v", err)
+		log.Printf("Capture failed: %v", err)
 		http.Error(w, "Failed to capture screenshot", http.StatusInternalServerError)
 		return
 	}
@@ -1280,17 +1283,17 @@ func handleScreenshot(w http.ResponseWriter, r *http.Request) {
 	// Save to storage (manual screenshot)
 	_, err = manager.Save(img, false)
 	if err != nil {
-		log.Printf("❌ Failed to save screenshot: %v", err)
+		log.Printf("Failed to save screenshot: %v", err)
 		// Continue to serve the image even if save fails
 	}
 	
-	log.Printf("✅ Screenshot captured successfully for %s", r.RemoteAddr)
+	log.Printf("Screenshot captured successfully for %s", r.RemoteAddr)
 
 	// Encode and send response
 	var buf bytes.Buffer
 	err = png.Encode(&buf, img)
 	if err != nil {
-		log.Printf("❌ Encoding failed: %v", err)
+		log.Printf("Encoding failed: %v", err)
 		http.Error(w, "Failed to encode image", http.StatusInternalServerError)
 		return
 	}
@@ -1301,7 +1304,7 @@ func handleScreenshot(w http.ResponseWriter, r *http.Request) {
 
 	_, err = w.Write(buf.Bytes())
 	if err != nil {
-		log.Printf("❌ Failed to write response: %v", err)
+		log.Printf("Failed to write response: %v", err)
 	}
 }
 
@@ -1317,7 +1320,7 @@ func handleActivity(w http.ResponseWriter, r *http.Request) {
 	// Retrieve recent screenshots
 	screenshots, err := manager.List(24)
 	if err != nil {
-		log.Printf("❌ Failed to list screenshots: %v", err)
+		log.Printf("Failed to list screenshots: %v", err)
 		http.Error(w, "Failed to retrieve screenshots", http.StatusInternalServerError)
 		return
 	}
@@ -1337,7 +1340,7 @@ func handleActivity(w http.ResponseWriter, r *http.Request) {
 	// Execute template
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := templates.ExecuteTemplate(w, "activity.html", data); err != nil {
-		log.Printf("❌ Failed to render template: %v", err)
+		log.Printf("Failed to render template: %v", err)
 		http.Error(w, "Failed to render page", http.StatusInternalServerError)
 	}
 }
@@ -1365,7 +1368,7 @@ func handleScreenshotImage(w http.ResponseWriter, r *http.Request) {
 	// Read image from disk
 	img, err := storage.ReadScreenshot(screenshot.Path)
 	if err != nil {
-		log.Printf("❌ Failed to read screenshot: %v", err)
+		log.Printf("Failed to read screenshot: %v", err)
 		http.Error(w, "Failed to load screenshot", http.StatusInternalServerError)
 		return
 	}
@@ -1375,7 +1378,7 @@ func handleScreenshotImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=3600") // Cache for 1 hour
 	
 	if err := png.Encode(w, img); err != nil {
-		log.Printf("❌ Failed to encode screenshot: %v", err)
+		log.Printf("Failed to encode screenshot: %v", err)
 	}
 }
 
@@ -1398,12 +1401,12 @@ func startCleanupRoutine() {
 
 // performCleanup removes screenshots older than 1 week.
 func performCleanup() {
-	log.Println("🧹 Running screenshot cleanup...")
+	log.Println("Running screenshot cleanup...")
 	
 	if err := manager.Cleanup(7 * 24 * time.Hour); err != nil {
-		log.Printf("❌ Cleanup failed: %v", err)
+		log.Printf("Cleanup failed: %v", err)
 	} else {
-		log.Println("✅ Cleanup completed")
+		log.Println("Cleanup completed")
 	}
 }
 ```
@@ -1565,9 +1568,11 @@ Create `main_test.go`:
 package main
 
 import (
+	"html/template"
 	"image"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
