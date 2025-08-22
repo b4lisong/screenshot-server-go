@@ -3,7 +3,9 @@ package config
 
 import (
 	"fmt"
+	"net/mail"
 	"os"
+	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -25,6 +27,36 @@ type Config struct {
 	
 	// Logging configuration
 	LogLevel string `yaml:"log_level"`
+	
+	// Email configuration
+	Email EmailConfig `yaml:"email"`
+}
+
+// EmailConfig represents SMTP email notification configuration.
+type EmailConfig struct {
+	// Enable/disable email notifications
+	Enabled bool `yaml:"enabled"`
+	
+	// SMTP server configuration
+	SMTPHost     string `yaml:"smtp_host"`
+	SMTPPort     int    `yaml:"smtp_port"`
+	SMTPUsername string `yaml:"smtp_username"`
+	SMTPPassword string `yaml:"smtp_password"`
+	SMTPSecurity string `yaml:"smtp_security"` // "none", "tls", "starttls"
+	
+	// Email addresses
+	FromEmail string   `yaml:"from_email"`
+	ToEmails  []string `yaml:"to_emails"`
+	
+	// Email content configuration
+	SubjectPrefix string `yaml:"subject_prefix"`
+	
+	// Notification settings
+	ServerStart    bool   `yaml:"server_start"`
+	ServerStop     bool   `yaml:"server_stop"`
+	DailySummary   bool   `yaml:"daily_summary"`
+	SummaryTime    string `yaml:"summary_time"` // "15:04" format
+	SummaryTimezone string `yaml:"summary_timezone"` // IANA timezone
 }
 
 // Default returns a configuration with default values.
@@ -37,6 +69,17 @@ func Default() *Config {
 		AutoRefreshInterval: "30s",
 		MaxFailures:         3,
 		LogLevel:           "info",
+		Email: EmailConfig{
+			Enabled:         false,
+			SMTPPort:        587,
+			SMTPSecurity:    "starttls",
+			SubjectPrefix:   "[Screenshot Server]",
+			ServerStart:     true,
+			ServerStop:      true,
+			DailySummary:    true,
+			SummaryTime:     "09:00",
+			SummaryTimezone: "Local",
+		},
 	}
 }
 
@@ -112,6 +155,13 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid log_level: %s (must be one of: debug, info, warn, error)", c.LogLevel)
 	}
 	
+	// Validate email configuration if enabled
+	if c.Email.Enabled {
+		if err := c.validateEmailConfig(); err != nil {
+			return fmt.Errorf("invalid email configuration: %w", err)
+		}
+	}
+	
 	return nil
 }
 
@@ -136,4 +186,78 @@ func (c *Config) GetAutoRefreshInterval() time.Duration {
 // GetAutoRefreshMilliseconds returns the auto-refresh interval in milliseconds for JavaScript.
 func (c *Config) GetAutoRefreshMilliseconds() int {
 	return int(c.GetAutoRefreshInterval().Milliseconds())
+}
+
+// validateEmailConfig validates email configuration settings.
+func (c *Config) validateEmailConfig() error {
+	// Validate SMTP host
+	if c.Email.SMTPHost == "" {
+		return fmt.Errorf("smtp_host cannot be empty when email is enabled")
+	}
+	
+	// Validate SMTP port
+	if c.Email.SMTPPort < 1 || c.Email.SMTPPort > 65535 {
+		return fmt.Errorf("smtp_port must be between 1 and 65535, got %d", c.Email.SMTPPort)
+	}
+	
+	// Validate SMTP security
+	validSecurity := map[string]bool{
+		"none":     true,
+		"tls":      true,
+		"starttls": true,
+	}
+	if !validSecurity[c.Email.SMTPSecurity] {
+		return fmt.Errorf("invalid smtp_security: %s (must be one of: none, tls, starttls)", c.Email.SMTPSecurity)
+	}
+	
+	// Validate from email
+	if c.Email.FromEmail == "" {
+		return fmt.Errorf("from_email cannot be empty when email is enabled")
+	}
+	if _, err := mail.ParseAddress(c.Email.FromEmail); err != nil {
+		return fmt.Errorf("invalid from_email format: %w", err)
+	}
+	
+	// Validate to emails
+	if len(c.Email.ToEmails) == 0 {
+		return fmt.Errorf("to_emails cannot be empty when email is enabled")
+	}
+	for i, email := range c.Email.ToEmails {
+		if _, err := mail.ParseAddress(email); err != nil {
+			return fmt.Errorf("invalid to_email[%d] format: %w", i, err)
+		}
+	}
+	
+	// Validate summary time format
+	if c.Email.DailySummary {
+		if _, err := time.Parse("15:04", c.Email.SummaryTime); err != nil {
+			return fmt.Errorf("invalid summary_time format (must be HH:MM): %w", err)
+		}
+		
+		// Validate timezone
+		if c.Email.SummaryTimezone != "Local" {
+			if _, err := time.LoadLocation(c.Email.SummaryTimezone); err != nil {
+				return fmt.Errorf("invalid summary_timezone: %w", err)
+			}
+		}
+	}
+	
+	return nil
+}
+
+// GetSummaryLocation returns the timezone location for daily summaries.
+func (c *Config) GetSummaryLocation() *time.Location {
+	if c.Email.SummaryTimezone == "Local" {
+		return time.Local
+	}
+	loc, err := time.LoadLocation(c.Email.SummaryTimezone)
+	if err != nil {
+		return time.Local // Fallback to local time
+	}
+	return loc
+}
+
+// GetSMTPAddress returns the full SMTP server address.
+func (c *Config) GetSMTPAddress() string {
+	return c.Email.SMTPHost + ":" + strconv.Itoa(c.Email.SMTPPort)
 }

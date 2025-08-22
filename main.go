@@ -9,10 +9,14 @@ import (
 	"image/png"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/b4lisong/screenshot-server-go/config"
+	"github.com/b4lisong/screenshot-server-go/email"
 	"github.com/b4lisong/screenshot-server-go/scheduler"
 	"github.com/b4lisong/screenshot-server-go/screenshot"
 	"github.com/b4lisong/screenshot-server-go/storage"
@@ -21,10 +25,12 @@ import (
 // Server holds all dependencies for the HTTP server.
 // This eliminates global variables and enables dependency injection.
 type Server struct {
-	manager   *storage.Manager
-	templates *template.Template
-	scheduler *scheduler.Scheduler
-	config    *config.Config
+	manager         *storage.Manager
+	templates       *template.Template
+	scheduler       *scheduler.Scheduler
+	config          *config.Config
+	mailer          *email.Mailer
+	dailyScheduler  *email.DailySummaryScheduler
 }
 
 // ScreenshotResponse represents the JSON response for screenshot API endpoints
@@ -42,12 +48,14 @@ type ErrorResponse struct {
 }
 
 // NewServer creates a new Server instance with all dependencies.
-func NewServer(manager *storage.Manager, templates *template.Template, scheduler *scheduler.Scheduler, config *config.Config) *Server {
+func NewServer(manager *storage.Manager, templates *template.Template, scheduler *scheduler.Scheduler, config *config.Config, mailer *email.Mailer, dailyScheduler *email.DailySummaryScheduler) *Server {
 	return &Server{
-		manager:   manager,
-		templates: templates,
-		scheduler: scheduler,
-		config:    config,
+		manager:        manager,
+		templates:      templates,
+		scheduler:      scheduler,
+		config:         config,
+		mailer:         mailer,
+		dailyScheduler: dailyScheduler,
 	}
 }
 
@@ -110,6 +118,19 @@ func main() {
 		log.Fatalf("Failed to parse templates: %v", err)
 	}
 
+	// Initialize email system
+	mailer, err := email.New(&cfg.Email)
+	if err != nil {
+		log.Fatalf("Failed to initialize email system: %v", err)
+	}
+
+	// Create server info for email notifications
+	serverInfo := email.ServerInfo{
+		Port:       cfg.Port,
+		StorageDir: cfg.StorageDir,
+		Version:    "1.0.0", // You might want to make this configurable
+	}
+
 	// Start automatic screenshot scheduler
 	sched := scheduler.New(screenshot.Capture, func(img image.Image, isAutomatic bool) error {
 		_, err := manager.Save(img, isAutomatic)
@@ -120,8 +141,15 @@ func main() {
 	}
 	defer sched.Stop()
 
+	// Initialize daily summary scheduler
+	dailyScheduler := email.NewDailySummaryScheduler(cfg, fileStorage, mailer, serverInfo)
+	if err := dailyScheduler.Start(); err != nil {
+		log.Fatalf("Failed to start daily summary scheduler: %v", err)
+	}
+	defer dailyScheduler.Stop()
+
 	// Create server with dependencies
-	server := NewServer(manager, templates, sched, cfg)
+	server := NewServer(manager, templates, sched, cfg, mailer, dailyScheduler)
 
 	// Start cleanup routine
 	server.startCleanupRoutine()
@@ -136,12 +164,39 @@ func main() {
 	http.HandleFunc("/api/screenshot", server.handleAPIScreenshot)
 	http.HandleFunc("/api/screenshots", server.handleAPIScreenshots)
 
-	log.Printf("Server started at http://localhost:%d", cfg.Port)
-	log.Printf("View activity at http://localhost:%d/activity", cfg.Port)
+	// Set up graceful shutdown handling
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	err = http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), nil)
-	if err != nil {
-		log.Fatalf("Server failed to start: %v", err)
+	// Start HTTP server in a goroutine
+	serverErr := make(chan error, 1)
+	go func() {
+		log.Printf("Server started at http://localhost:%d", cfg.Port)
+		log.Printf("View activity at http://localhost:%d/activity", cfg.Port)
+		
+		// Send server start notification
+		if err := mailer.SendServerStartNotification(serverInfo); err != nil {
+			log.Printf("Failed to send server start notification: %v", err)
+		}
+		
+		serverErr <- http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), nil)
+	}()
+
+	// Wait for shutdown signal or server error
+	select {
+	case err := <-serverErr:
+		if err != nil {
+			log.Fatalf("Server failed to start: %v", err)
+		}
+	case sig := <-sigChan:
+		log.Printf("Received signal %v, initiating graceful shutdown...", sig)
+		
+		// Send server stop notification
+		if err := mailer.SendServerStopNotification(serverInfo); err != nil {
+			log.Printf("Failed to send server stop notification: %v", err)
+		}
+		
+		log.Println("Graceful shutdown completed")
 	}
 }
 

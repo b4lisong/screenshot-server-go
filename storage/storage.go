@@ -41,6 +41,8 @@ type Screenshot struct {
 	CapturedAt time.Time
 	// IsAutomatic indicates if this was an automatic capture
 	IsAutomatic bool
+	// Size is the file size in bytes
+	Size int64
 }
 
 // Storage defines the interface for screenshot storage operations.
@@ -69,6 +71,10 @@ type Storage interface {
 	// Cleanup removes screenshots older than the specified duration
 	// Returns error to report any cleanup failures (partial failures possible)
 	Cleanup(olderThan time.Duration) error
+
+	// ListByDateRange returns screenshots captured within the specified date range
+	// Returns screenshots from start date (inclusive) to end date (exclusive)
+	ListByDateRange(start, end time.Time) ([]*Screenshot, error)
 }
 
 // FileStorage implements Storage using the filesystem.
@@ -175,12 +181,19 @@ func (fs *FileStorage) Save(img image.Image, isAutomatic bool) (*Screenshot, err
 		return nil, fmt.Errorf("save operation failed: encoding screenshot to %q: %w", fullPath, err)
 	}
 
+	// Get file size for metadata
+	fileInfo, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("save operation failed: getting file info for %q: %w", fullPath, err)
+	}
+
 	// Success path: Create and return the Screenshot metadata
 	screenshot := &Screenshot{
 		ID:          now.Format(timestampLayoutWithNanos),
 		Path:        fullPath,
 		CapturedAt:  now,
 		IsAutomatic: isAutomatic,
+		Size:        fileInfo.Size(),
 	}
 
 	return screenshot, nil
@@ -285,6 +298,56 @@ func (fs *FileStorage) Get(id string) (*Screenshot, error) {
 	}
 
 	return found, nil
+}
+
+// ListByDateRange retrieves screenshots captured within the specified date range.
+// Returns screenshots from start date (inclusive) to end date (exclusive).
+func (fs *FileStorage) ListByDateRange(start, end time.Time) ([]*Screenshot, error) {
+	var screenshots []*Screenshot
+
+	// Validate input parameters
+	if start.After(end) {
+		return nil, fmt.Errorf("list by date range failed: start time %v cannot be after end time %v", start, end)
+	}
+
+	// Walk the directory tree
+	err := filepath.Walk(fs.baseDir, func(path string, info os.FileInfo, err error) error {
+		// Handle walk errors gracefully
+		if err != nil {
+			return nil // Continue walking
+		}
+
+		// Skip directories and non-PNG files
+		if info.IsDir() || !strings.HasSuffix(info.Name(), ".png") {
+			return nil
+		}
+
+		// Parse screenshot metadata from filename
+		screenshot, err := fs.parseScreenshot(path, info)
+		if err != nil {
+			return nil // Skip invalid files
+		}
+
+		// Check if screenshot is within date range
+		if screenshot.CapturedAt.After(start) || screenshot.CapturedAt.Equal(start) {
+			if screenshot.CapturedAt.Before(end) {
+				screenshots = append(screenshots, screenshot)
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("list by date range failed: walking directory %q: %w", fs.baseDir, err)
+	}
+
+	// Sort by captured time, newest first
+	sort.Slice(screenshots, func(i, j int) bool {
+		return screenshots[i].CapturedAt.After(screenshots[j].CapturedAt)
+	})
+
+	return screenshots, nil
 }
 
 // Cleanup removes screenshots older than the specified duration.
@@ -418,6 +481,7 @@ func (fs *FileStorage) parseScreenshot(path string, info os.FileInfo) (*Screensh
 		Path:        path,
 		CapturedAt:  capturedAt,
 		IsAutomatic: isAutomatic,
+		Size:        info.Size(),
 	}, nil
 }
 
