@@ -184,12 +184,38 @@ func (m *Mailer) SendDailySummary(serverInfo ServerInfo, screenshots []*storage.
 		// Check if this screenshot has an attachment
 		hasAttachment := false
 		compressedSizeKB := int64(0)
-		for _, att := range attachmentResult.Attachments {
-			if att.Filename == filepath.Base(screenshot.Path) ||
-				att.Filename == m.generateAttachmentFilename(screenshot, i) {
-				hasAttachment = true
-				compressedSizeKB = int64(att.SizeKB)
-				break
+
+		// Handle different attachment strategies
+		switch attachmentResult.Strategy {
+		case "zip":
+			// For ZIP strategy, all screenshots that aren't in the skipped list are attached
+			screenshotBase := filepath.Base(screenshot.Path)
+			hasAttachment = true // Assume attached unless found in skipped list
+			for _, skipped := range attachmentResult.Skipped {
+				if skipped == screenshotBase {
+					hasAttachment = false
+					break
+				}
+			}
+			// For ZIP, estimate compressed size per screenshot based on total ZIP size
+			if hasAttachment && len(screenshots) > 0 {
+				// Calculate non-skipped count for accurate size estimation
+				nonSkippedCount := len(screenshots) - len(attachmentResult.Skipped)
+				if nonSkippedCount > 0 {
+					estimatedSizePerScreenshot := int64(attachmentResult.TotalSizeKB) / int64(nonSkippedCount)
+					compressedSizeKB = estimatedSizePerScreenshot
+				}
+			}
+
+		case "individual", "adaptive":
+			// For individual attachments, match by filename
+			for _, att := range attachmentResult.Attachments {
+				if att.Filename == filepath.Base(screenshot.Path) ||
+					att.Filename == m.generateAttachmentFilename(screenshot, i) {
+					hasAttachment = true
+					compressedSizeKB = int64(att.SizeKB)
+					break
+				}
 			}
 		}
 

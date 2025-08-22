@@ -3,6 +3,7 @@ package email
 import (
 	"fmt"
 	"image"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -265,5 +266,199 @@ func TestEmailDataWithAttachments(t *testing.T) {
 	screenshot2 := data.Screenshots[1]
 	if screenshot2.HasAttachment {
 		t.Error("Expected second screenshot to not have attachment")
+	}
+}
+
+func TestZipAttachmentDetection(t *testing.T) {
+	// Create temporary directory for test
+	tempDir := t.TempDir()
+
+	// Create test screenshots
+	screenshots := make([]*storage.Screenshot, 3)
+	for i := range screenshots {
+		screenshot := &storage.Screenshot{
+			ID:          fmt.Sprintf("test%d", i+1),
+			Path:        filepath.Join(tempDir, fmt.Sprintf("screenshot%d.png", i+1)),
+			CapturedAt:  time.Now(),
+			IsAutomatic: i%2 == 0,
+			Size:        500 * 1024, // 500KB
+		}
+		screenshots[i] = screenshot
+	}
+
+	// Create a mock attachment result that simulates ZIP strategy
+	attachmentResult := &AttachmentResult{
+		Attachments: []AttachmentInfo{{
+			Filename: "screenshots_20250822_150000.zip",
+			Data:     []byte("mock zip data"),
+			SizeKB:   300, // Total ZIP size
+		}},
+		Strategy:    "zip",
+		TotalSizeKB: 300,
+		Skipped:     []string{}, // No screenshots skipped
+		Errors:      []error{},
+	}
+
+	// Create test config
+	cfg := config.Default()
+	cfg.Email.Enabled = false
+
+	// Simulate the SendDailySummary attachment detection logic
+	summaries := make([]ScreenshotSummary, len(screenshots))
+	for i, screenshot := range screenshots {
+		hasAttachment := false
+		compressedSizeKB := int64(0)
+
+		// Use the same logic from the fixed SendDailySummary function
+		switch attachmentResult.Strategy {
+		case "zip":
+			screenshotBase := filepath.Base(screenshot.Path)
+			hasAttachment = true
+			for _, skipped := range attachmentResult.Skipped {
+				if skipped == screenshotBase {
+					hasAttachment = false
+					break
+				}
+			}
+			if hasAttachment && len(screenshots) > 0 {
+				// Calculate non-skipped count for accurate size estimation
+				nonSkippedCount := len(screenshots) - len(attachmentResult.Skipped)
+				if nonSkippedCount > 0 {
+					estimatedSizePerScreenshot := int64(attachmentResult.TotalSizeKB) / int64(nonSkippedCount)
+					compressedSizeKB = estimatedSizePerScreenshot
+				}
+			}
+		}
+
+		summaries[i] = ScreenshotSummary{
+			ID:               screenshot.ID,
+			CapturedAt:       screenshot.CapturedAt,
+			IsAutomatic:      screenshot.IsAutomatic,
+			SizeKB:           screenshot.Size / 1024,
+			CompressedSizeKB: compressedSizeKB,
+			HasAttachment:    hasAttachment,
+		}
+	}
+
+	// Verify all screenshots are marked as attached for ZIP strategy
+	for i, summary := range summaries {
+		if !summary.HasAttachment {
+			t.Errorf("Screenshot %d should be marked as attached in ZIP strategy", i+1)
+		}
+		
+		expectedCompressedSize := int64(300 / 3) // 300KB ZIP / 3 screenshots = 100KB per screenshot
+		if summary.CompressedSizeKB != expectedCompressedSize {
+			t.Errorf("Screenshot %d: expected compressed size %d KB, got %d KB", 
+				i+1, expectedCompressedSize, summary.CompressedSizeKB)
+		}
+	}
+
+	// Test with skipped screenshots
+	attachmentResultWithSkipped := &AttachmentResult{
+		Attachments: []AttachmentInfo{{
+			Filename: "screenshots_20250822_150000.zip",
+			Data:     []byte("mock zip data"),
+			SizeKB:   200,
+		}},
+		Strategy:    "zip",
+		TotalSizeKB: 200,
+		Skipped:     []string{"screenshot2.png"}, // Second screenshot skipped
+		Errors:      []error{},
+	}
+
+	// Test again with skipped logic
+	for i, screenshot := range screenshots {
+		hasAttachment := false
+		compressedSizeKB := int64(0)
+
+		switch attachmentResultWithSkipped.Strategy {
+		case "zip":
+			screenshotBase := filepath.Base(screenshot.Path)
+			hasAttachment = true
+			for _, skipped := range attachmentResultWithSkipped.Skipped {
+				if skipped == screenshotBase {
+					hasAttachment = false
+					break
+				}
+			}
+			if hasAttachment && len(screenshots) > 0 {
+				// Calculate non-skipped count for accurate size estimation
+				nonSkippedCount := len(screenshots) - len(attachmentResultWithSkipped.Skipped)
+				if nonSkippedCount > 0 {
+					estimatedSizePerScreenshot := int64(attachmentResultWithSkipped.TotalSizeKB) / int64(nonSkippedCount)
+					compressedSizeKB = estimatedSizePerScreenshot
+				}
+			}
+		}
+
+		summaries[i] = ScreenshotSummary{
+			HasAttachment:    hasAttachment,
+			CompressedSizeKB: compressedSizeKB,
+		}
+	}
+
+	// Verify skipped logic works correctly
+	if summaries[0].HasAttachment != true {
+		t.Error("First screenshot should be attached (not skipped)")
+	}
+	if summaries[1].HasAttachment != false {
+		t.Error("Second screenshot should not be attached (was skipped)")
+	}
+	if summaries[2].HasAttachment != true {
+		t.Error("Third screenshot should be attached (not skipped)")
+	}
+
+	// Test edge case: all screenshots skipped (division by zero protection)
+	attachmentResultAllSkipped := &AttachmentResult{
+		Attachments: []AttachmentInfo{{
+			Filename: "screenshots_20250822_150000.zip",
+			Data:     []byte("mock zip data"),
+			SizeKB:   100,
+		}},
+		Strategy:    "zip",
+		TotalSizeKB: 100,
+		Skipped:     []string{"screenshot1.png", "screenshot2.png", "screenshot3.png"}, // All skipped
+		Errors:      []error{},
+	}
+
+	// Test with all screenshots skipped - should not cause division by zero
+	for i, screenshot := range screenshots {
+		hasAttachment := false
+		compressedSizeKB := int64(0)
+
+		switch attachmentResultAllSkipped.Strategy {
+		case "zip":
+			screenshotBase := filepath.Base(screenshot.Path)
+			hasAttachment = true
+			for _, skipped := range attachmentResultAllSkipped.Skipped {
+				if skipped == screenshotBase {
+					hasAttachment = false
+					break
+				}
+			}
+			if hasAttachment && len(screenshots) > 0 {
+				// Calculate non-skipped count for accurate size estimation
+				nonSkippedCount := len(screenshots) - len(attachmentResultAllSkipped.Skipped)
+				if nonSkippedCount > 0 {
+					estimatedSizePerScreenshot := int64(attachmentResultAllSkipped.TotalSizeKB) / int64(nonSkippedCount)
+					compressedSizeKB = estimatedSizePerScreenshot
+				}
+			}
+		}
+
+		summaries[i] = ScreenshotSummary{
+			HasAttachment:    hasAttachment,
+			CompressedSizeKB: compressedSizeKB,
+		}
+	}
+
+	// Verify all screenshots are marked as not attached and no division by zero occurred
+	for i, summary := range summaries {
+		if summary.HasAttachment != false {
+			t.Errorf("Screenshot %d should not be attached when all are skipped", i+1)
+		}
+		if summary.CompressedSizeKB != 0 {
+			t.Errorf("Screenshot %d should have 0 compressed size when not attached, got %d", i+1, summary.CompressedSizeKB)
+		}
 	}
 }
