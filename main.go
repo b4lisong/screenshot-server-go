@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/b4lisong/screenshot-server-go/config"
 	"github.com/b4lisong/screenshot-server-go/scheduler"
 	"github.com/b4lisong/screenshot-server-go/screenshot"
 	"github.com/b4lisong/screenshot-server-go/storage"
@@ -23,6 +24,7 @@ type Server struct {
 	manager   *storage.Manager
 	templates *template.Template
 	scheduler *scheduler.Scheduler
+	config    *config.Config
 }
 
 // ScreenshotResponse represents the JSON response for screenshot API endpoints
@@ -40,11 +42,12 @@ type ErrorResponse struct {
 }
 
 // NewServer creates a new Server instance with all dependencies.
-func NewServer(manager *storage.Manager, templates *template.Template, scheduler *scheduler.Scheduler) *Server {
+func NewServer(manager *storage.Manager, templates *template.Template, scheduler *scheduler.Scheduler, config *config.Config) *Server {
 	return &Server{
 		manager:   manager,
 		templates: templates,
 		scheduler: scheduler,
+		config:    config,
 	}
 }
 
@@ -76,13 +79,23 @@ func (s *Server) captureAndSave() (*storage.Screenshot, error) {
 }
 
 func main() {
-	// Parse command-line flags
-	port := flag.Int("p", 8080, "port to run the server on")
-	storageDir := flag.String("storage", "./screenshots", "directory to store screenshots")
+	// Load configuration from config.yaml
+	cfg, err := config.LoadConfig("config.yaml")
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	// Parse command-line flags (these override config file values)
+	port := flag.Int("p", cfg.Port, "port to run the server on")
+	storageDir := flag.String("storage", cfg.StorageDir, "directory to store screenshots")
 	flag.Parse()
 
+	// Override config with command-line flags if provided
+	cfg.Port = *port
+	cfg.StorageDir = *storageDir
+
 	// Initialize storage
-	fileStorage, err := storage.NewFileStorage(*storageDir)
+	fileStorage, err := storage.NewFileStorage(cfg.StorageDir)
 	if err != nil {
 		log.Fatalf("Failed to initialize storage: %v", err)
 	}
@@ -108,7 +121,7 @@ func main() {
 	defer sched.Stop()
 
 	// Create server with dependencies
-	server := NewServer(manager, templates, sched)
+	server := NewServer(manager, templates, sched, cfg)
 
 	// Start cleanup routine
 	server.startCleanupRoutine()
@@ -123,10 +136,10 @@ func main() {
 	http.HandleFunc("/api/screenshot", server.handleAPIScreenshot)
 	http.HandleFunc("/api/screenshots", server.handleAPIScreenshots)
 
-	log.Printf("Server started at http://localhost:%d", *port)
-	log.Printf("View activity at http://localhost:%d/activity", *port)
+	log.Printf("Server started at http://localhost:%d", cfg.Port)
+	log.Printf("View activity at http://localhost:%d/activity", cfg.Port)
 
-	err = http.ListenAndServe(fmt.Sprintf(":%d", *port), nil)
+	err = http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), nil)
 	if err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
@@ -189,13 +202,17 @@ func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 	// Prepare template data
 	// In Go, we create a struct to pass data to templates
 	data := struct {
-		Title       string
-		Screenshots []*storage.Screenshot
-		Now         time.Time
+		Title               string
+		Screenshots         []*storage.Screenshot
+		Now                 time.Time
+		AutoRefreshInterval int
+		MaxFailures         int
 	}{
-		Title:       "Screenshot Activity",
-		Screenshots: screenshots,
-		Now:         time.Now(),
+		Title:               "Screenshot Activity",
+		Screenshots:         screenshots,
+		Now:                 time.Now(),
+		AutoRefreshInterval: s.config.GetAutoRefreshMilliseconds(),
+		MaxFailures:         s.config.MaxFailures,
 	}
 
 	// Execute template
@@ -247,8 +264,8 @@ func (s *Server) handleScreenshotImage(w http.ResponseWriter, r *http.Request) {
 // This demonstrates long-running background tasks in Go.
 func (s *Server) startCleanupRoutine() {
 	go func() {
-		// Run cleanup every hour
-		ticker := time.NewTicker(time.Hour)
+		// Use configurable cleanup interval
+		ticker := time.NewTicker(s.config.GetCleanupInterval())
 		defer ticker.Stop()
 
 		// Also run immediately on startup
@@ -260,11 +277,11 @@ func (s *Server) startCleanupRoutine() {
 	}()
 }
 
-// performCleanup removes screenshots older than 1 week.
+// performCleanup removes screenshots older than the configured retention period.
 func (s *Server) performCleanup() {
 	log.Println("Running screenshot cleanup...")
 
-	if err := s.manager.Cleanup(7 * 24 * time.Hour); err != nil {
+	if err := s.manager.Cleanup(s.config.GetRetentionPeriod()); err != nil {
 		log.Printf("Cleanup failed: %v", err)
 	} else {
 		log.Println("Cleanup completed")

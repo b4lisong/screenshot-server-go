@@ -49,11 +49,12 @@ tmp/
 *.log
 logs/
 
-# Environment files (if you add them later)
+# Environment & config files
 .env
 .env.local
 .env.production
 .env.test
+config.yaml
 
 # Any custom storage directories
 storage_*/
