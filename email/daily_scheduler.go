@@ -12,9 +12,9 @@ import (
 
 // DailySummaryScheduler manages scheduled daily summary emails.
 type DailySummaryScheduler struct {
-	config    *config.Config
-	storage   storage.Storage
-	mailer    *Mailer
+	config     *config.Config
+	storage    storage.Storage
+	mailer     *Mailer
 	serverInfo ServerInfo
 
 	// Control channels for graceful shutdown
@@ -59,7 +59,7 @@ func (s *DailySummaryScheduler) Start() error {
 
 	go s.run()
 
-	log.Printf("Daily summary email scheduler started (sends at %s %s)", 
+	log.Printf("Daily summary email scheduler started (sends at %s %s)",
 		s.config.Email.SummaryTime, s.config.Email.SummaryTimezone)
 	return nil
 }
@@ -67,7 +67,7 @@ func (s *DailySummaryScheduler) Start() error {
 // Stop gracefully shuts down the scheduler.
 func (s *DailySummaryScheduler) Stop() {
 	s.mu.Lock()
-	
+
 	if !s.running {
 		s.mu.Unlock()
 		return
@@ -174,7 +174,7 @@ func (s *DailySummaryScheduler) sendDailySummary(summaryDate time.Time) {
 		return
 	}
 
-	log.Printf("Daily summary sent successfully for %s (%d screenshots)", 
+	log.Printf("Daily summary sent successfully for %s (%d screenshots)",
 		summaryDate.Format("2006-01-02"), len(screenshots))
 }
 

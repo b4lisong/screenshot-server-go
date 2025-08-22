@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/b4lisong/screenshot-server-go/config"
+	"github.com/b4lisong/screenshot-server-go/email"
 	"github.com/b4lisong/screenshot-server-go/scheduler"
 	"github.com/b4lisong/screenshot-server-go/screenshot"
 	"github.com/b4lisong/screenshot-server-go/storage"
@@ -38,8 +40,25 @@ func TestActivityHandler(t *testing.T) {
 		return nil
 	})
 
+	// Create test config
+	cfg := config.Default()
+	cfg.Email.Enabled = false // Disable email for tests
+
+	// Create mock mailer
+	mailer, err := email.New(&cfg.Email, tempDir)
+	if err != nil {
+		t.Fatalf("creating mailer: %v", err)
+	}
+
+	// Create mock daily scheduler
+	dailyScheduler := email.NewDailySummaryScheduler(cfg, fileStorage, mailer, email.ServerInfo{
+		Port:       8080,
+		StorageDir: tempDir,
+		Version:    "test",
+	})
+
 	// Create server instance
-	server := NewServer(manager, templates, mockScheduler)
+	server := NewServer(manager, templates, mockScheduler, cfg, mailer, dailyScheduler)
 
 	// Save some test screenshots
 	testImg := image.NewRGBA(image.Rect(0, 0, 100, 100))
@@ -99,8 +118,25 @@ func TestScreenshotImageHandler(t *testing.T) {
 		return nil
 	})
 
+	// Create test config
+	cfg := config.Default()
+	cfg.Email.Enabled = false // Disable email for tests
+
+	// Create mock mailer
+	mailer, err := email.New(&cfg.Email, tempDir)
+	if err != nil {
+		t.Fatalf("creating mailer: %v", err)
+	}
+
+	// Create mock daily scheduler
+	dailyScheduler := email.NewDailySummaryScheduler(cfg, fileStorage, mailer, email.ServerInfo{
+		Port:       8080,
+		StorageDir: tempDir,
+		Version:    "test",
+	})
+
 	// Create server instance
-	server := NewServer(manager, nil, mockScheduler)
+	server := NewServer(manager, nil, mockScheduler, cfg, mailer, dailyScheduler)
 
 	testImg := image.NewRGBA(image.Rect(0, 0, 100, 100))
 	screenshot, err := manager.Save(testImg, false)

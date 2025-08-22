@@ -25,12 +25,12 @@ import (
 // Server holds all dependencies for the HTTP server.
 // This eliminates global variables and enables dependency injection.
 type Server struct {
-	manager         *storage.Manager
-	templates       *template.Template
-	scheduler       *scheduler.Scheduler
-	config          *config.Config
-	mailer          *email.Mailer
-	dailyScheduler  *email.DailySummaryScheduler
+	manager        *storage.Manager
+	templates      *template.Template
+	scheduler      *scheduler.Scheduler
+	config         *config.Config
+	mailer         *email.Mailer
+	dailyScheduler *email.DailySummaryScheduler
 }
 
 // ScreenshotResponse represents the JSON response for screenshot API endpoints
@@ -119,7 +119,7 @@ func main() {
 	}
 
 	// Initialize email system
-	mailer, err := email.New(&cfg.Email)
+	mailer, err := email.New(&cfg.Email, cfg.StorageDir)
 	if err != nil {
 		log.Fatalf("Failed to initialize email system: %v", err)
 	}
@@ -173,12 +173,12 @@ func main() {
 	go func() {
 		log.Printf("Server started at http://localhost:%d", cfg.Port)
 		log.Printf("View activity at http://localhost:%d/activity", cfg.Port)
-		
+
 		// Send server start notification
 		if err := mailer.SendServerStartNotification(serverInfo); err != nil {
 			log.Printf("Failed to send server start notification: %v", err)
 		}
-		
+
 		serverErr <- http.ListenAndServe(fmt.Sprintf(":%d", cfg.Port), nil)
 	}()
 
@@ -190,12 +190,12 @@ func main() {
 		}
 	case sig := <-sigChan:
 		log.Printf("Received signal %v, initiating graceful shutdown...", sig)
-		
+
 		// Send server stop notification
 		if err := mailer.SendServerStopNotification(serverInfo); err != nil {
 			log.Printf("Failed to send server stop notification: %v", err)
 		}
-		
+
 		log.Println("Graceful shutdown completed")
 	}
 }
