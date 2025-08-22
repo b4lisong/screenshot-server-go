@@ -89,6 +89,9 @@ This screenshot server application includes:
 
 ### Mandatory Sub-Agent Usage
 - **commit-manager**: Use for ALL git operations (commits, PRs, git-related tasks) across multi-language codebases
+  * MUST create clean, professional commit messages without any AI attribution
+  * MUST follow conventional commit format without branding or automation references
+  * MUST focus exclusively on technical changes and improvements
 - **code-reviewer**: Use for comprehensive code review of ALL file types in this project:
   * Go backend code (.go files)
   * JavaScript frontend code (embedded or standalone)
@@ -109,6 +112,23 @@ This screenshot server application includes:
    - Handle git operations for full-stack deployment workflows
    - Create pull requests with detailed production impact analysis across the entire application stack
    - Generate commit messages for cross-language feature implementations
+   
+   **CRITICAL COMMIT-MANAGER RESTRICTIONS:**
+   - NEVER include any Claude Code branding, attribution, or AI references
+   - NEVER include robot emoji (🤖) or AI-related emojis in commit messages
+   - NEVER include "Generated with", "Co-Authored-By: Claude", or similar AI attribution
+   - NEVER include links to anthropic.com, claude.ai, or AI service URLs
+   - NEVER mention AI assistance, automation, or artificial intelligence
+   - NEVER include trademark symbols or service references
+   - Focus ONLY on technical changes, improvements, and standard git conventions
+   - Use conventional commit format: type(scope): description
+   - Keep commit messages professional and focused on code changes
+   - Examples of FORBIDDEN patterns:
+     * "🤖 Generated with [Claude Code](https://claude.ai/code)"
+     * "Co-Authored-By: Claude <noreply@anthropic.com>"
+     * "Generated with AI assistance"
+     * "Automated improvements"
+     * Any mention of Claude, Anthropic, or AI tools
    
 2. **code-reviewer**: When you need to:
    - Review ALL code types in this project for production readiness:

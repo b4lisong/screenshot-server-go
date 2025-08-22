@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/b4lisong/screenshot-server-go/scheduler"
+	"github.com/b4lisong/screenshot-server-go/screenshot"
 	"github.com/b4lisong/screenshot-server-go/storage"
 )
 
@@ -21,15 +23,23 @@ func TestActivityHandler(t *testing.T) {
 		t.Fatalf("creating storage: %v", err)
 	}
 
-	// Initialize global manager for the test
-	manager = storage.NewManager(fileStorage)
+	// Create manager for the test
+	manager := storage.NewManager(fileStorage)
 	defer manager.Close()
 
 	// Parse templates
-	templates, err = template.ParseGlob("templates/*.html")
+	templates, err := template.ParseGlob("templates/*.html")
 	if err != nil {
 		t.Skipf("skipping test - templates not found: %v", err)
 	}
+
+	// Create a mock scheduler (not used in this test)
+	mockScheduler := scheduler.New(screenshot.Capture, func(img image.Image, isAutomatic bool) error {
+		return nil
+	})
+
+	// Create server instance
+	server := NewServer(manager, templates, mockScheduler)
 
 	// Save some test screenshots
 	testImg := image.NewRGBA(image.Rect(0, 0, 100, 100))
@@ -49,7 +59,7 @@ func TestActivityHandler(t *testing.T) {
 
 	// Record response
 	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(handleActivity)
+	handler := http.HandlerFunc(server.handleActivity)
 	handler.ServeHTTP(rr, req)
 
 	// Check status code
@@ -81,8 +91,16 @@ func TestScreenshotImageHandler(t *testing.T) {
 		t.Fatalf("creating storage: %v", err)
 	}
 
-	manager = storage.NewManager(fileStorage)
+	manager := storage.NewManager(fileStorage)
 	defer manager.Close()
+
+	// Create a mock scheduler (not used in this test)
+	mockScheduler := scheduler.New(screenshot.Capture, func(img image.Image, isAutomatic bool) error {
+		return nil
+	})
+
+	// Create server instance
+	server := NewServer(manager, nil, mockScheduler)
 
 	testImg := image.NewRGBA(image.Rect(0, 0, 100, 100))
 	screenshot, err := manager.Save(testImg, false)
@@ -97,7 +115,7 @@ func TestScreenshotImageHandler(t *testing.T) {
 	}
 
 	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(handleScreenshotImage)
+	handler := http.HandlerFunc(server.handleScreenshotImage)
 	handler.ServeHTTP(rr, req)
 
 	if status := rr.Code; status != http.StatusOK {
@@ -113,6 +131,7 @@ func TestScreenshotImageHandler(t *testing.T) {
 	// Test invalid request
 	req, _ = http.NewRequest("GET", "/screenshot/invalid", nil)
 	rr = httptest.NewRecorder()
+	handler = http.HandlerFunc(server.handleScreenshotImage)
 	handler.ServeHTTP(rr, req)
 
 	if status := rr.Code; status != http.StatusNotFound {

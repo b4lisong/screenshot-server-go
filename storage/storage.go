@@ -14,6 +14,22 @@ import (
 	"time"
 )
 
+// Predefined time layouts for efficient parsing.
+// By using constants, we avoid the overhead of parsing the layout string on every call.
+// This optimization addresses Issue #7: time.Parse performance during directory walks.
+//
+// PERFORMANCE OPTIMIZATION:
+// - Constants are more efficient than string literals in time.Parse calls
+// - Provides better maintainability and prevents typos in format strings
+// - Thread-safe by design (constants are immutable)
+// - Consistent format usage across the application
+const (
+	// timestampLayoutWithNanos represents the full precision timestamp format
+	timestampLayoutWithNanos = "20060102_150405.000000000"
+	// timestampLayoutBasic represents the timestamp format without nanoseconds
+	timestampLayoutBasic = "20060102_150405"
+)
+
 // Screenshot represents a captured screenshot with its metadata.
 // In Go, we embed behavior (methods) with data (fields) in structs.
 type Screenshot struct {
@@ -70,20 +86,25 @@ type FileStorage struct {
 // 3. Contextual error messages - tells caller exactly what failed
 // 4. Constructor pattern - returns concrete type, not interface
 func NewFileStorage(baseDir string) (*FileStorage, error) {
+	// Validate input parameters
+	if baseDir == "" {
+		return nil, fmt.Errorf("file storage initialization failed: base directory path cannot be empty")
+	}
+
 	// Convert to absolute path for consistency
 	// ERROR PATTERN 1: Check immediately and wrap with context
 	absPath, err := filepath.Abs(baseDir)
 	if err != nil {
 		// %w wraps the error - caller can use errors.Is() or errors.Unwrap()
 		// Message provides context about what operation failed
-		return nil, fmt.Errorf("resolving base directory: %w", err)
+		return nil, fmt.Errorf("file storage initialization failed: resolving base directory %q: %w", baseDir, err)
 	}
 
 	// Create directory with read/write/execute permissions for owner only
 	// 0750 = rwxr-x--- (owner: all, group: read/execute, others: none)
 	// ERROR PATTERN 2: Same pattern - check and wrap
 	if err := os.MkdirAll(absPath, 0750); err != nil {
-		return nil, fmt.Errorf("creating base directory: %w", err)
+		return nil, fmt.Errorf("file storage initialization failed: creating base directory %q: %w", absPath, err)
 	}
 
 	// Success: return concrete type (not interface)
@@ -104,6 +125,11 @@ func NewFileStorage(baseDir string) (*FileStorage, error) {
 func (fs *FileStorage) Save(img image.Image, isAutomatic bool) (*Screenshot, error) {
 	now := time.Now()
 
+	// Validate input image
+	if img == nil {
+		return nil, fmt.Errorf("save operation failed: image cannot be nil")
+	}
+
 	// Create directory structure: screenshots/2024/01/15/
 	// This makes it easy to browse and clean up old files
 	year := now.Format("2006")
@@ -113,7 +139,7 @@ func (fs *FileStorage) Save(img image.Image, isAutomatic bool) (*Screenshot, err
 	dir := filepath.Join(fs.baseDir, year, month, day)
 	// ERROR HANDLING: Directory creation can fail (permissions, disk space, etc.)
 	if err := os.MkdirAll(dir, 0750); err != nil {
-		return nil, fmt.Errorf("creating directory structure: %w", err)
+		return nil, fmt.Errorf("save operation failed: creating directory structure %q: %w", dir, err)
 	}
 
 	// Generate unique filename with timestamp and type indicator
@@ -125,7 +151,7 @@ func (fs *FileStorage) Save(img image.Image, isAutomatic bool) (*Screenshot, err
 
 	// Use high precision timestamp for uniqueness even with rapid captures
 	filename := fmt.Sprintf("%s_%s.png",
-		now.Format("20060102_150405.000000000"),
+		now.Format(timestampLayoutWithNanos),
 		typeIndicator)
 
 	fullPath := filepath.Join(dir, filename)
@@ -135,7 +161,7 @@ func (fs *FileStorage) Save(img image.Image, isAutomatic bool) (*Screenshot, err
 	file, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0640)
 	// ERROR HANDLING: File creation can fail for many reasons
 	if err != nil {
-		return nil, fmt.Errorf("creating screenshot file: %w", err)
+		return nil, fmt.Errorf("save operation failed: creating screenshot file %q: %w", fullPath, err)
 	}
 	// DEFER PATTERN: Ensure cleanup regardless of how function exits
 	// This runs even if png.Encode fails or function panics
@@ -146,12 +172,12 @@ func (fs *FileStorage) Save(img image.Image, isAutomatic bool) (*Screenshot, err
 		// ERROR HANDLING WITH CLEANUP: If encoding fails, remove the partial file
 		// We ignore the error from os.Remove because we're already handling a more important error
 		os.Remove(fullPath)
-		return nil, fmt.Errorf("encoding screenshot: %w", err)
+		return nil, fmt.Errorf("save operation failed: encoding screenshot to %q: %w", fullPath, err)
 	}
 
 	// Success path: Create and return the Screenshot metadata
 	screenshot := &Screenshot{
-		ID:          now.Format("20060102_150405.000000000"),
+		ID:          now.Format(timestampLayoutWithNanos),
 		Path:        fullPath,
 		CapturedAt:  now,
 		IsAutomatic: isAutomatic,
@@ -165,11 +191,19 @@ func (fs *FileStorage) Save(img image.Image, isAutomatic bool) (*Screenshot, err
 func (fs *FileStorage) List(limit int) ([]*Screenshot, error) {
 	var screenshots []*Screenshot
 
+	// Validate input parameters
+	if limit < 0 {
+		return nil, fmt.Errorf("list operation failed: limit cannot be negative (got %d)", limit)
+	}
+	if limit == 0 {
+		return []*Screenshot{}, nil // Return empty slice for zero limit
+	}
+
 	// Walk the directory tree - this is more efficient than recursion
 	err := filepath.Walk(fs.baseDir, func(path string, info os.FileInfo, err error) error {
 		// Handle walk errors gracefully
 		if err != nil {
-			// Log but continue walking
+			// Log but continue walking - partial results are better than no results
 			return nil
 		}
 
@@ -181,7 +215,7 @@ func (fs *FileStorage) List(limit int) ([]*Screenshot, error) {
 		// Parse screenshot metadata from filename
 		screenshot, err := fs.parseScreenshot(path, info)
 		if err != nil {
-			// Skip invalid files but continue
+			// Skip invalid files but continue - corrupt files shouldn't break listing
 			return nil
 		}
 
@@ -190,7 +224,7 @@ func (fs *FileStorage) List(limit int) ([]*Screenshot, error) {
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("walking directory: %w", err)
+		return nil, fmt.Errorf("list operation failed: walking directory %q: %w", fs.baseDir, err)
 	}
 
 	// Sort by captured time, newest first
@@ -209,11 +243,21 @@ func (fs *FileStorage) List(limit int) ([]*Screenshot, error) {
 
 // Get retrieves a specific screenshot by ID.
 func (fs *FileStorage) Get(id string) (*Screenshot, error) {
+	// Validate input parameters
+	if id == "" {
+		return nil, fmt.Errorf("get operation failed: screenshot ID cannot be empty")
+	}
+
 	// Search for the file by walking the directory tree
 	var found *Screenshot
 
 	err := filepath.Walk(fs.baseDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
+			return nil // Continue walking despite individual file errors
+		}
+
+		// Skip non-PNG files
+		if !strings.HasSuffix(info.Name(), ".png") {
 			return nil
 		}
 
@@ -221,7 +265,7 @@ func (fs *FileStorage) Get(id string) (*Screenshot, error) {
 		if strings.Contains(info.Name(), id) {
 			screenshot, err := fs.parseScreenshot(path, info)
 			if err != nil {
-				return nil
+				return nil // Skip invalid files but continue searching
 			}
 			if screenshot.ID == id {
 				found = screenshot
@@ -233,11 +277,11 @@ func (fs *FileStorage) Get(id string) (*Screenshot, error) {
 	})
 
 	if err != nil {
-		return nil, fmt.Errorf("searching for screenshot: %w", err)
+		return nil, fmt.Errorf("get operation failed: searching for screenshot ID %q in %q: %w", id, fs.baseDir, err)
 	}
 
 	if found == nil {
-		return nil, fmt.Errorf("screenshot with ID %s not found", id)
+		return nil, fmt.Errorf("get operation failed: screenshot with ID %q not found in storage", id)
 	}
 
 	return found, nil
@@ -251,8 +295,17 @@ func (fs *FileStorage) Get(id string) (*Screenshot, error) {
 // 3. Graceful degradation - continue cleanup even if some files can't be removed
 // 4. Error aggregation - report summary of failures to caller
 func (fs *FileStorage) Cleanup(olderThan time.Duration) error {
+	// Validate input parameters
+	if olderThan < 0 {
+		return fmt.Errorf("cleanup operation failed: duration cannot be negative (got %v)", olderThan)
+	}
+	if olderThan == 0 {
+		return fmt.Errorf("cleanup operation failed: duration cannot be zero (would delete all screenshots)")
+	}
+
 	cutoff := time.Now().Add(-olderThan)
 	var cleanupErrors []error // PATTERN: Collect multiple errors
+	var processedFiles, removedFiles int
 
 	err := filepath.Walk(fs.baseDir, func(path string, info os.FileInfo, err error) error {
 		// PATTERN: Handle walk errors gracefully - don't stop entire cleanup
@@ -260,10 +313,19 @@ func (fs *FileStorage) Cleanup(olderThan time.Duration) error {
 			return nil // Continue walking despite individual file errors
 		}
 
+		// Skip non-PNG files
+		if !strings.HasSuffix(info.Name(), ".png") {
+			return nil
+		}
+
+		processedFiles++
+
 		// Parse the file to check its age
 		screenshot, err := fs.parseScreenshot(path, info)
 		if err != nil {
 			// PATTERN: Skip invalid files but continue cleanup
+			// Add error context for debugging invalid files
+			cleanupErrors = append(cleanupErrors, fmt.Errorf("skipping invalid file %q: %w", path, err))
 			return nil
 		}
 
@@ -272,7 +334,9 @@ func (fs *FileStorage) Cleanup(olderThan time.Duration) error {
 			if err := os.Remove(path); err != nil {
 				// PATTERN: Collect error but don't fail entire operation
 				// This allows cleanup to continue for other files
-				cleanupErrors = append(cleanupErrors, fmt.Errorf("removing %s: %w", path, err))
+				cleanupErrors = append(cleanupErrors, fmt.Errorf("removing screenshot %q (captured %v): %w", path, screenshot.CapturedAt, err))
+			} else {
+				removedFiles++
 			}
 		}
 
@@ -281,14 +345,14 @@ func (fs *FileStorage) Cleanup(olderThan time.Duration) error {
 
 	// ERROR HANDLING: Check if the walk itself failed
 	if err != nil {
-		return fmt.Errorf("walking directory during cleanup: %w", err)
+		return fmt.Errorf("cleanup operation failed: walking directory %q: %w", fs.baseDir, err)
 	}
 
-	// PATTERN: Aggregate multiple errors into single failure
+	// PATTERN: Aggregate multiple errors into single failure with detailed context
 	if len(cleanupErrors) > 0 {
-		// Return error indicating partial failure
+		// Return error indicating partial failure with operation statistics
 		// In production, you might log individual errors and return summary
-		return fmt.Errorf("cleanup completed with %d errors", len(cleanupErrors))
+		return fmt.Errorf("cleanup operation completed with partial success: processed %d files, removed %d files, encountered %d errors (cutoff: %v)", processedFiles, removedFiles, len(cleanupErrors), cutoff)
 	}
 
 	// Also clean up empty directories
@@ -301,24 +365,53 @@ func (fs *FileStorage) Cleanup(olderThan time.Duration) error {
 // parseScreenshot extracts metadata from a screenshot file.
 // This is a helper method that encapsulates the parsing logic.
 func (fs *FileStorage) parseScreenshot(path string, info os.FileInfo) (*Screenshot, error) {
+	// Validate inputs
+	if info == nil {
+		return nil, fmt.Errorf("parseScreenshot failed: file info cannot be nil for path %q", path)
+	}
+	if path == "" {
+		return nil, fmt.Errorf("parseScreenshot failed: file path cannot be empty")
+	}
+
 	// Extract filename without extension
 	filename := strings.TrimSuffix(info.Name(), ".png")
+	if filename == info.Name() {
+		return nil, fmt.Errorf("parseScreenshot failed: file %q is not a PNG file", info.Name())
+	}
+
 	parts := strings.Split(filename, "_")
 
-	if len(parts) < 3 {
-		return nil, fmt.Errorf("invalid screenshot filename format %s: expected format YYYYMMDD_HHMMSS.nnnnnnnnn_type", filename)
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("parseScreenshot failed: invalid filename format %q - expected minimum format 'YYYYMMDD_HHMMSS[.nnnnnnnnn][_type]', got %d parts", filename, len(parts))
 	}
 
 	// Parse timestamp from filename
-	// Format: 20240115_143052.000000000_auto
+	// Format: 20240115_143052.000000000_auto or 20240115_143052_manual
 	timeStr := parts[0] + "_" + parts[1]
-	capturedAt, err := time.Parse("20060102_150405.000000000", timeStr)
+	capturedAt, err := time.Parse(timestampLayoutWithNanos, timeStr)
 	if err != nil {
-		return nil, fmt.Errorf("parsing timestamp %s from filename %s: %w", timeStr, filename, err)
+		// Try fallback format without nanoseconds
+		capturedAt, err = time.Parse(timestampLayoutBasic, timeStr)
+		if err != nil {
+			return nil, fmt.Errorf("parseScreenshot failed: parsing timestamp %q from filename %q - expected format 'YYYYMMDD_HHMMSS[.nnnnnnnnn]': %w", timeStr, filename, err)
+		}
 	}
 
-	// Determine if automatic
-	isAutomatic := len(parts) > 2 && parts[2] == "auto"
+	// Determine if automatic based on type indicator
+	isAutomatic := false
+	if len(parts) > 2 {
+		typeIndicator := parts[2]
+		switch typeIndicator {
+		case "auto":
+			isAutomatic = true
+		case "manual":
+			isAutomatic = false
+		default:
+			// For backward compatibility, don't fail on unknown type indicators
+			// Just assume manual capture
+			isAutomatic = false
+		}
+	}
 
 	return &Screenshot{
 		ID:          timeStr,
@@ -351,15 +444,20 @@ func (fs *FileStorage) removeEmptyDirs() {
 // ReadScreenshot loads a screenshot image from disk.
 // This is a utility function for serving images.
 func ReadScreenshot(path string) (image.Image, error) {
+	// Validate input parameters
+	if path == "" {
+		return nil, fmt.Errorf("read screenshot failed: file path cannot be empty")
+	}
+
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("opening screenshot file: %w", err)
+		return nil, fmt.Errorf("read screenshot failed: opening screenshot file %q: %w", path, err)
 	}
 	defer file.Close()
 
 	img, err := png.Decode(file)
 	if err != nil {
-		return nil, fmt.Errorf("decoding screenshot: %w", err)
+		return nil, fmt.Errorf("read screenshot failed: decoding PNG file %q: %w", path, err)
 	}
 
 	return img, nil

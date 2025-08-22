@@ -172,3 +172,113 @@ func TestFileStorage_Cleanup(t *testing.T) {
 		t.Error("recent screenshot was incorrectly removed")
 	}
 }
+
+// Benchmark functions to measure time parsing performance
+
+// BenchmarkTimeParsing_Optimized benchmarks the optimized time parsing using constants
+func BenchmarkTimeParsing_Optimized(b *testing.B) {
+	timeStr := "20240115_143052.000000000"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := time.Parse(timestampLayoutWithNanos, timeStr)
+		if err != nil {
+			// Try fallback format
+			_, err = time.Parse(timestampLayoutBasic, timeStr)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
+
+// BenchmarkTimeParsing_Original benchmarks the original time parsing using string literals
+func BenchmarkTimeParsing_Original(b *testing.B) {
+	timeStr := "20240115_143052.000000000"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := time.Parse("20060102_150405.000000000", timeStr)
+		if err != nil {
+			// Try fallback format
+			_, err = time.Parse("20060102_150405", timeStr)
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
+
+// BenchmarkParseScreenshot benchmarks the full parseScreenshot function
+func BenchmarkParseScreenshot(b *testing.B) {
+	tempDir := b.TempDir()
+	storage, err := NewFileStorage(tempDir)
+	if err != nil {
+		b.Fatalf("creating storage: %v", err)
+	}
+
+	// Create a mock FileInfo for testing
+	info := &mockFileInfo{
+		name: "20240115_143052.000000000_auto.png",
+		size: 1024,
+		mode: 0644,
+		time: time.Now(),
+	}
+
+	path := filepath.Join(tempDir, info.name)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := storage.parseScreenshot(path, info)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkListWithManyFiles benchmarks the List operation with many files
+func BenchmarkListWithManyFiles(b *testing.B) {
+	tempDir := b.TempDir()
+	storage, err := NewFileStorage(tempDir)
+	if err != nil {
+		b.Fatalf("creating storage: %v", err)
+	}
+
+	// Create test files with proper naming convention
+	img := createTestImage()
+	fileCount := 1000
+
+	b.Logf("Creating %d test files...", fileCount)
+	for i := 0; i < fileCount; i++ {
+		_, err := storage.Save(img, i%2 == 0)
+		if err != nil {
+			b.Fatalf("saving test screenshot %d: %v", i, err)
+		}
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		screenshots, err := storage.List(100)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if len(screenshots) == 0 {
+			b.Fatal("no screenshots returned")
+		}
+	}
+}
+
+// mockFileInfo implements os.FileInfo for testing
+type mockFileInfo struct {
+	name string
+	size int64
+	mode os.FileMode
+	time time.Time
+}
+
+func (m *mockFileInfo) Name() string       { return m.name }
+func (m *mockFileInfo) Size() int64        { return m.size }
+func (m *mockFileInfo) Mode() os.FileMode  { return m.mode }
+func (m *mockFileInfo) ModTime() time.Time { return m.time }
+func (m *mockFileInfo) IsDir() bool        { return false }
+func (m *mockFileInfo) Sys() interface{}   { return nil }

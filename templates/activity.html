@@ -98,12 +98,127 @@
         .nav a:hover {
             text-decoration: underline;
         }
+        
+        /* API interaction styles */
+        .capture-btn {
+            background-color: #1976d2;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .capture-btn:hover:not(:disabled) {
+            background-color: #1565c0;
+        }
+        
+        .capture-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .loading {
+            opacity: 0.6;
+        }
+        
+        .error-message {
+            background-color: #ffebee;
+            color: #c62828;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .success-message {
+            background-color: #e8f5e8;
+            color: #2e7d32;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .warning-message {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
+        
+        .connection-status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-left: 10px;
+        }
+        
+        .status-connected {
+            background-color: #e8f5e8;
+            color: #2e7d32;
+        }
+        
+        .status-disconnected {
+            background-color: #ffebee;
+            color: #c62828;
+        }
+        
+        .status-degraded {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .refresh-controls {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .manual-refresh-btn {
+            background-color: #f57c00;
+            color: white;
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            display: none;
+        }
+        
+        .manual-refresh-btn:hover:not(:disabled) {
+            background-color: #ef6c00;
+        }
+        
+        .manual-refresh-btn:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
     <div class="nav">
         <a href="/">Home</a>
-        <a href="/screenshot">Capture Screenshot</a>
+        <button id="captureBtn" class="capture-btn">Capture Screenshot</button>
+    </div>
+    
+    <div id="errorMessage" class="error-message"></div>
+    <div id="successMessage" class="success-message"></div>
+    <div id="warningMessage" class="warning-message"></div>
+    
+    <div class="refresh-controls">
+        <span>Auto-refresh: 
+            <span id="connectionStatus" class="connection-status status-connected">Connected</span>
+        </span>
+        <button id="manualRefreshBtn" class="manual-refresh-btn">Refresh Gallery</button>
     </div>
 
     <h1>{{.Title}}</h1>
@@ -112,29 +227,1071 @@
         Current time: {{.Now.Format "January 2, 2006 3:04:05 PM"}}
     </div>
 
-    {{if .Screenshots}}
-        <div class="gallery">
-            {{range .Screenshots}}
-                <div class="screenshot">
-                    <a href="/screenshot/{{.ID}}">
-                        <img src="/screenshot/{{.ID}}" alt="Screenshot from {{.CapturedAt.Format "Jan 2, 3:04 PM"}}" loading="lazy">
-                    </a>
-                    <div class="screenshot-info">
-                        <span class="screenshot-time">
-                            {{.CapturedAt.Format "Jan 2, 3:04:05 PM"}}
-                        </span>
-                        <span class="screenshot-type {{if .IsAutomatic}}type-auto{{else}}type-manual{{end}}">
-                            {{if .IsAutomatic}}Automatic{{else}}Manual{{end}}
-                        </span>
+    <div id="galleryContainer">
+        {{if .Screenshots}}
+            <div id="gallery" class="gallery">
+                {{range .Screenshots}}
+                    <div class="screenshot">
+                        <a href="/screenshot/{{.ID}}">
+                            <img src="/screenshot/{{.ID}}" alt="Screenshot from {{.CapturedAt.Format "Jan 2, 3:04 PM"}}" loading="lazy">
+                        </a>
+                        <div class="screenshot-info">
+                            <span class="screenshot-time">
+                                {{.CapturedAt.Format "Jan 2, 3:04:05 PM"}}
+                            </span>
+                            <span class="screenshot-type {{if .IsAutomatic}}type-auto{{else}}type-manual{{end}}">
+                                {{if .IsAutomatic}}Automatic{{else}}Manual{{end}}
+                            </span>
+                        </div>
                     </div>
-                </div>
-            {{end}}
-        </div>
-    {{else}}
-        <div class="empty">
-            <p>No screenshots yet.</p>
-            <p>Screenshots will appear here as they are captured automatically or <a href="/screenshot">manually</a>.</p>
-        </div>
-    {{end}}
+                {{end}}
+            </div>
+        {{else}}
+            <div id="emptyState" class="empty">
+                <p>No screenshots yet.</p>
+                <p>Screenshots will appear here as they are captured automatically or manually.</p>
+            </div>
+        {{end}}
+    </div>
+
+    <script>
+        // Constants
+        const AUTO_REFRESH_INTERVAL = 30000; // 30 seconds
+        const SUCCESS_MESSAGE_TIMEOUT = 3000; // 3 seconds
+        const MAX_CONSECUTIVE_FAILURES = 3; // Maximum failures before circuit breaker
+        const BACKOFF_BASE_DELAY = 2000; // Base delay for exponential backoff (2 seconds)
+        const MAX_BACKOFF_DELAY = 60000; // Maximum backoff delay (60 seconds)
+        const CONNECTION_TIMEOUT = 10000; // 10 seconds timeout for API calls
+
+        // Request optimization constants
+        const CACHE_TTL = 30000; // 30 seconds cache TTL for screenshot listings
+        const CACHE_MAX_SIZE = 50; // Maximum number of cached responses
+        const REQUEST_DEDUP_TIMEOUT = 5000; // 5 seconds to consider requests as duplicates
+
+        /**
+         * RequestCache - Manages response caching with TTL and size limits
+         * Implements production-ready caching with automatic cleanup and memory management
+         */
+        class RequestCache {
+            constructor(maxSize = CACHE_MAX_SIZE, defaultTtl = CACHE_TTL) {
+                this.cache = new Map();
+                this.maxSize = maxSize;
+                this.defaultTtl = defaultTtl;
+                this.cleanupTimer = null;
+                this.startPeriodicCleanup();
+            }
+
+            /**
+             * Generate cache key from request parameters
+             * @param {string} url - Request URL
+             * @param {Object} options - Request options
+             * @returns {string} Cache key
+             */
+            generateKey(url, options = {}) {
+                const method = options.method || 'GET';
+                const headers = JSON.stringify(options.headers || {});
+                const body = options.body || '';
+                return `${method}:${url}:${headers}:${body}`;
+            }
+
+            /**
+             * Get cached response if valid and not expired
+             * @param {string} key - Cache key
+             * @returns {*} Cached response or null
+             */
+            get(key) {
+                const entry = this.cache.get(key);
+                if (!entry) return null;
+
+                if (Date.now() > entry.expiresAt) {
+                    this.cache.delete(key);
+                    return null;
+                }
+
+                // Update access time for LRU behavior
+                entry.lastAccessed = Date.now();
+                return entry.data;
+            }
+
+            /**
+             * Store response in cache with TTL
+             * @param {string} key - Cache key
+             * @param {*} data - Response data to cache
+             * @param {number} ttl - Time to live in milliseconds
+             */
+            set(key, data, ttl = this.defaultTtl) {
+                // Enforce cache size limit with LRU eviction
+                if (this.cache.size >= this.maxSize) {
+                    this.evictLeastRecentlyUsed();
+                }
+
+                const now = Date.now();
+                this.cache.set(key, {
+                    data: structuredClone(data), // Deep clone to prevent mutations
+                    expiresAt: now + ttl,
+                    lastAccessed: now,
+                    createdAt: now
+                });
+            }
+
+            /**
+             * Remove specific cache entry
+             * @param {string} key - Cache key to remove
+             */
+            delete(key) {
+                this.cache.delete(key);
+            }
+
+            /**
+             * Clear entire cache
+             */
+            clear() {
+                this.cache.clear();
+            }
+
+            /**
+             * Invalidate cache entries matching pattern
+             * @param {RegExp|string} pattern - Pattern to match against cache keys
+             */
+            invalidatePattern(pattern) {
+                const regex = pattern instanceof RegExp ? pattern : new RegExp(pattern);
+                const keysToDelete = [];
+                
+                for (const key of this.cache.keys()) {
+                    if (regex.test(key)) {
+                        keysToDelete.push(key);
+                    }
+                }
+                
+                keysToDelete.forEach(key => this.cache.delete(key));
+            }
+
+            /**
+             * Evict least recently used entry when cache is full
+             */
+            evictLeastRecentlyUsed() {
+                let oldestKey = null;
+                let oldestTime = Infinity;
+
+                for (const [key, entry] of this.cache.entries()) {
+                    if (entry.lastAccessed < oldestTime) {
+                        oldestTime = entry.lastAccessed;
+                        oldestKey = key;
+                    }
+                }
+
+                if (oldestKey) {
+                    this.cache.delete(oldestKey);
+                }
+            }
+
+            /**
+             * Remove expired entries from cache
+             */
+            cleanup() {
+                const now = Date.now();
+                const expiredKeys = [];
+
+                for (const [key, entry] of this.cache.entries()) {
+                    if (now > entry.expiresAt) {
+                        expiredKeys.push(key);
+                    }
+                }
+
+                expiredKeys.forEach(key => this.cache.delete(key));
+            }
+
+            /**
+             * Start periodic cleanup to prevent memory leaks
+             */
+            startPeriodicCleanup() {
+                this.cleanupTimer = setInterval(() => {
+                    this.cleanup();
+                }, Math.min(this.defaultTtl, 60000)); // Cleanup at most every minute
+            }
+
+            /**
+             * Stop periodic cleanup (for cleanup)
+             */
+            stopPeriodicCleanup() {
+                if (this.cleanupTimer) {
+                    clearInterval(this.cleanupTimer);
+                    this.cleanupTimer = null;
+                }
+            }
+
+            /**
+             * Get cache statistics for monitoring
+             * @returns {Object} Cache statistics
+             */
+            getStats() {
+                const now = Date.now();
+                let totalSize = 0;
+                let expiredCount = 0;
+
+                for (const entry of this.cache.values()) {
+                    totalSize += JSON.stringify(entry.data).length;
+                    if (now > entry.expiresAt) {
+                        expiredCount++;
+                    }
+                }
+
+                return {
+                    size: this.cache.size,
+                    maxSize: this.maxSize,
+                    totalSizeBytes: totalSize,
+                    expiredCount
+                };
+            }
+        }
+
+        /**
+         * RequestDeduplicator - Prevents duplicate concurrent requests
+         * Implements production-ready request deduplication with proper cleanup
+         */
+        class RequestDeduplicator {
+            constructor(timeout = REQUEST_DEDUP_TIMEOUT) {
+                this.pendingRequests = new Map();
+                this.timeout = timeout;
+            }
+
+            /**
+             * Generate request key for deduplication
+             * @param {string} url - Request URL
+             * @param {Object} options - Request options
+             * @returns {string} Request key
+             */
+            generateKey(url, options = {}) {
+                const method = options.method || 'GET';
+                const headers = JSON.stringify(options.headers || {});
+                const body = options.body || '';
+                return `${method}:${url}:${headers}:${body}`;
+            }
+
+            /**
+             * Execute request with deduplication
+             * @param {string} url - Request URL
+             * @param {Object} options - Request options
+             * @param {Function} requestFn - Function that executes the actual request
+             * @returns {Promise} Request promise
+             */
+            async execute(url, options, requestFn) {
+                const key = this.generateKey(url, options);
+                
+                // Check if identical request is already in progress
+                if (this.pendingRequests.has(key)) {
+                    console.log(`Deduplicating request: ${key}`);
+                    return this.pendingRequests.get(key).promise;
+                }
+
+                // Create new request with abort controller
+                const abortController = new AbortController();
+                const timeoutId = setTimeout(() => {
+                    abortController.abort();
+                    this.pendingRequests.delete(key);
+                }, this.timeout);
+
+                // Merge abort signal with existing signal if provided
+                const originalSignal = options.signal;
+                const combinedSignal = this.combineAbortSignals([
+                    abortController.signal,
+                    originalSignal
+                ].filter(Boolean));
+
+                const requestOptions = {
+                    ...options,
+                    signal: combinedSignal
+                };
+
+                // Execute request and handle cleanup
+                const promise = requestFn(url, requestOptions)
+                    .finally(() => {
+                        clearTimeout(timeoutId);
+                        this.pendingRequests.delete(key);
+                    });
+
+                // Store pending request
+                this.pendingRequests.set(key, {
+                    promise,
+                    abortController,
+                    timeoutId,
+                    startTime: Date.now()
+                });
+
+                return promise;
+            }
+
+            /**
+             * Combine multiple AbortSignals into one
+             * @param {AbortSignal[]} signals - Array of AbortSignals
+             * @returns {AbortSignal} Combined signal
+             */
+            combineAbortSignals(signals) {
+                if (signals.length === 0) return undefined;
+                if (signals.length === 1) return signals[0];
+
+                const controller = new AbortController();
+                
+                signals.forEach(signal => {
+                    if (signal.aborted) {
+                        controller.abort();
+                        return;
+                    }
+                    
+                    signal.addEventListener('abort', () => {
+                        controller.abort();
+                    }, { once: true });
+                });
+
+                return controller.signal;
+            }
+
+            /**
+             * Cancel specific request by key
+             * @param {string} url - Request URL
+             * @param {Object} options - Request options
+             */
+            cancel(url, options = {}) {
+                const key = this.generateKey(url, options);
+                const request = this.pendingRequests.get(key);
+                
+                if (request) {
+                    request.abortController.abort();
+                    clearTimeout(request.timeoutId);
+                    this.pendingRequests.delete(key);
+                }
+            }
+
+            /**
+             * Cancel all pending requests
+             */
+            cancelAll() {
+                for (const [key, request] of this.pendingRequests.entries()) {
+                    request.abortController.abort();
+                    clearTimeout(request.timeoutId);
+                }
+                this.pendingRequests.clear();
+            }
+
+            /**
+             * Get statistics about pending requests
+             * @returns {Object} Deduplication statistics
+             */
+            getStats() {
+                const now = Date.now();
+                const requests = Array.from(this.pendingRequests.values());
+                
+                return {
+                    pendingCount: requests.length,
+                    avgDuration: requests.length > 0 
+                        ? requests.reduce((sum, req) => sum + (now - req.startTime), 0) / requests.length 
+                        : 0,
+                    oldestRequest: requests.length > 0 
+                        ? Math.max(...requests.map(req => now - req.startTime)) 
+                        : 0
+                };
+            }
+        }
+
+        /**
+         * RequestManager - Coordinates caching, deduplication, and abort controller management
+         * Provides a unified interface for optimized HTTP requests
+         */
+        class RequestManager {
+            constructor(options = {}) {
+                this.cache = new RequestCache(options.cacheMaxSize, options.cacheTtl);
+                this.deduplicator = new RequestDeduplicator(options.dedupTimeout);
+                this.requestCount = 0;
+                this.cacheHits = 0;
+                this.cacheMisses = 0;
+                this.dedupHits = 0;
+            }
+
+            /**
+             * Execute optimized request with caching and deduplication
+             * @param {string} url - Request URL
+             * @param {Object} options - Request options
+             * @returns {Promise} Response promise
+             */
+            async request(url, options = {}) {
+                this.requestCount++;
+                
+                // For GET requests, check cache first
+                if (!options.method || options.method.toUpperCase() === 'GET') {
+                    const cacheKey = this.cache.generateKey(url, options);
+                    const cachedResponse = this.cache.get(cacheKey);
+                    
+                    if (cachedResponse) {
+                        console.log(`Cache hit for: ${cacheKey}`);
+                        this.cacheHits++;
+                        return Promise.resolve(structuredClone(cachedResponse));
+                    }
+                    
+                    this.cacheMisses++;
+                }
+
+                // Execute request with deduplication
+                const response = await this.deduplicator.execute(url, options, async (requestUrl, requestOptions) => {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), CONNECTION_TIMEOUT);
+                    
+                    try {
+                        // Merge signals if already provided
+                        const signals = [controller.signal];
+                        if (requestOptions.signal) {
+                            signals.push(requestOptions.signal);
+                        }
+                        
+                        const finalOptions = {
+                            ...requestOptions,
+                            signal: this.deduplicator.combineAbortSignals(signals)
+                        };
+
+                        const fetchResponse = await fetch(requestUrl, finalOptions);
+                        clearTimeout(timeoutId);
+                        
+                        if (!fetchResponse.ok) {
+                            throw new Error(`HTTP ${fetchResponse.status}: ${fetchResponse.statusText}`);
+                        }
+                        
+                        const data = await fetchResponse.json();
+                        
+                        // Cache successful GET responses
+                        if (!finalOptions.method || finalOptions.method.toUpperCase() === 'GET') {
+                            const cacheKey = this.cache.generateKey(requestUrl, finalOptions);
+                            this.cache.set(cacheKey, data);
+                        }
+                        
+                        return data;
+                    } catch (error) {
+                        clearTimeout(timeoutId);
+                        
+                        if (error.name === 'AbortError') {
+                            throw new Error('Request timeout - server took too long to respond');
+                        }
+                        
+                        throw error;
+                    }
+                });
+
+                return response;
+            }
+
+            /**
+             * Invalidate cache entries for specific patterns (e.g., after mutations)
+             * @param {RegExp|string} pattern - Pattern to match cache keys
+             */
+            invalidateCache(pattern) {
+                this.cache.invalidatePattern(pattern);
+            }
+
+            /**
+             * Clear all caches and cancel pending requests
+             */
+            reset() {
+                this.cache.clear();
+                this.deduplicator.cancelAll();
+                this.requestCount = 0;
+                this.cacheHits = 0;
+                this.cacheMisses = 0;
+                this.dedupHits = 0;
+            }
+
+            /**
+             * Cleanup resources (call on page unload)
+             */
+            cleanup() {
+                this.cache.stopPeriodicCleanup();
+                this.deduplicator.cancelAll();
+            }
+
+            /**
+             * Get comprehensive statistics
+             * @returns {Object} Request manager statistics
+             */
+            getStats() {
+                return {
+                    requests: {
+                        total: this.requestCount,
+                        cacheHits: this.cacheHits,
+                        cacheMisses: this.cacheMisses,
+                        cacheHitRate: this.requestCount > 0 ? this.cacheHits / this.requestCount : 0
+                    },
+                    cache: this.cache.getStats(),
+                    deduplication: this.deduplicator.getStats()
+                };
+            }
+        }
+
+        /**
+         * ScreenshotGallery - Manages screenshot capture and gallery display
+         * Separates API calls, DOM manipulation, and state management
+         * Now includes request optimization with caching and deduplication
+         */
+        class ScreenshotGallery {
+            constructor() {
+                this.captureBtn = document.getElementById('captureBtn');
+                this.errorMessage = document.getElementById('errorMessage');
+                this.successMessage = document.getElementById('successMessage');
+                this.warningMessage = document.getElementById('warningMessage');
+                this.connectionStatus = document.getElementById('connectionStatus');
+                this.manualRefreshBtn = document.getElementById('manualRefreshBtn');
+                this.galleryContainer = document.getElementById('galleryContainer');
+                this.autoRefreshTimer = null;
+                
+                // Error handling and circuit breaker state
+                this.consecutiveFailures = 0;
+                this.isCircuitBreakerOpen = false;
+                this.lastFailureTime = null;
+                this.backoffDelay = BACKOFF_BASE_DELAY;
+                this.connectionState = 'connected'; // 'connected', 'degraded', 'disconnected'
+                
+                // Request optimization - initialize RequestManager
+                this.requestManager = new RequestManager({
+                    cacheMaxSize: CACHE_MAX_SIZE,
+                    cacheTtl: CACHE_TTL,
+                    dedupTimeout: REQUEST_DEDUP_TIMEOUT
+                });
+                
+                // Track request states for UI feedback
+                this.activeRequests = new Set();
+                
+                this.init();
+            }
+
+            /**
+             * Initialize the gallery with event listeners and auto-refresh
+             */
+            init() {
+                this.captureBtn.addEventListener('click', () => this.handleCaptureClick());
+                this.manualRefreshBtn.addEventListener('click', () => this.handleManualRefresh());
+                
+                // Add lifecycle management for proper cleanup
+                window.addEventListener('beforeunload', () => {
+                    this.cleanup();
+                });
+                
+                // Also cleanup on visibility change to prevent background requests
+                document.addEventListener('visibilitychange', () => {
+                    if (document.hidden) {
+                        this.stopAutoRefresh();
+                        // Cancel pending requests when page becomes hidden
+                        this.requestManager.deduplicator.cancelAll();
+                    } else if (!this.isCircuitBreakerOpen) {
+                        this.startAutoRefresh();
+                    }
+                });
+                
+                this.startAutoRefresh();
+            }
+
+            /**
+             * API Methods - Isolated backend communication
+             */
+            
+            /**
+             * Fetch screenshots from the backend API with caching and deduplication
+             * @returns {Promise<Array>} Array of screenshot objects
+             */
+            async fetchScreenshots() {
+                const requestId = 'fetchScreenshots';
+                this.activeRequests.add(requestId);
+                
+                try {
+                    // Use optimized request manager with caching and deduplication
+                    const screenshots = await this.requestManager.request('/api/screenshots', {
+                        method: 'GET'
+                    });
+                    
+                    return screenshots;
+                } finally {
+                    this.activeRequests.delete(requestId);
+                }
+            }
+
+            /**
+             * Capture a new screenshot via API with deduplication to prevent multiple concurrent captures
+             * @returns {Promise<Object>} Screenshot object with id, captured_at, is_automatic, url
+             */
+            async captureScreenshot() {
+                const requestId = 'captureScreenshot';
+                this.activeRequests.add(requestId);
+                
+                try {
+                    // Use optimized request manager for deduplication
+                    // This prevents multiple concurrent capture requests if user clicks rapidly
+                    const screenshot = await this.requestManager.request('/api/screenshot', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+                    
+                    // Invalidate screenshots cache after successful capture
+                    // This ensures the gallery shows the new screenshot immediately
+                    this.requestManager.invalidateCache(/\/api\/screenshots/);
+                    
+                    return screenshot;
+                } finally {
+                    this.activeRequests.delete(requestId);
+                }
+            }
+
+            /**
+             * UI State Management Methods
+             */
+            
+            /**
+             * Hide all message elements
+             */
+            hideMessages() {
+                this.errorMessage.style.display = 'none';
+                this.successMessage.style.display = 'none';
+                this.warningMessage.style.display = 'none';
+            }
+
+            /**
+             * Show error message to user
+             * @param {string} message - Error message to display
+             */
+            showError(message) {
+                this.hideMessages();
+                this.errorMessage.textContent = message;
+                this.errorMessage.style.display = 'block';
+            }
+
+            /**
+             * Show success message with auto-hide
+             * @param {string} message - Success message to display
+             */
+            showSuccess(message) {
+                this.hideMessages();
+                this.successMessage.textContent = message;
+                this.successMessage.style.display = 'block';
+                
+                setTimeout(() => {
+                    this.successMessage.style.display = 'none';
+                }, SUCCESS_MESSAGE_TIMEOUT);
+            }
+            
+            /**
+             * Show warning message to user
+             * @param {string} message - Warning message to display
+             */
+            showWarning(message) {
+                this.hideMessages();
+                this.warningMessage.textContent = message;
+                this.warningMessage.style.display = 'block';
+            }
+
+            /**
+             * Set capture button loading state
+             * @param {boolean} isLoading - Whether to show loading state
+             */
+            setCaptureButtonLoading(isLoading) {
+                this.captureBtn.disabled = isLoading;
+                this.captureBtn.textContent = isLoading ? 'Capturing...' : 'Capture Screenshot';
+                
+                if (isLoading) {
+                    this.captureBtn.classList.add('loading');
+                } else {
+                    this.captureBtn.classList.remove('loading');
+                }
+            }
+            
+            /**
+             * Set manual refresh button loading state
+             * @param {boolean} isLoading - Whether to show loading state
+             */
+            setManualRefreshButtonLoading(isLoading) {
+                this.manualRefreshBtn.disabled = isLoading;
+                this.manualRefreshBtn.textContent = isLoading ? 'Refreshing...' : 'Refresh Gallery';
+            }
+            
+            /**
+             * Update connection status indicator
+             * @param {string} state - Connection state: 'connected', 'degraded', 'disconnected'
+             */
+            updateConnectionStatus(state) {
+                this.connectionState = state;
+                this.connectionStatus.className = 'connection-status';
+                
+                switch (state) {
+                    case 'connected':
+                        this.connectionStatus.classList.add('status-connected');
+                        this.connectionStatus.textContent = 'Connected';
+                        this.manualRefreshBtn.style.display = 'none';
+                        break;
+                    case 'degraded':
+                        this.connectionStatus.classList.add('status-degraded');
+                        this.connectionStatus.textContent = 'Connection Issues';
+                        this.manualRefreshBtn.style.display = 'inline-block';
+                        break;
+                    case 'disconnected':
+                        this.connectionStatus.classList.add('status-disconnected');
+                        this.connectionStatus.textContent = 'Disconnected';
+                        this.manualRefreshBtn.style.display = 'inline-block';
+                        break;
+                }
+            }
+
+            /**
+             * DOM Manipulation Methods
+             */
+            
+            /**
+             * Format date string for display using consistent Intl API
+             * Uses explicit locale and formatting options to ensure consistency across all browsers/environments
+             * @param {string} dateString - ISO date string
+             * @returns {string} Formatted date string
+             */
+            formatDate(dateString) {
+                const date = new Date(dateString);
+                // Use Intl.DateTimeFormat for consistent, reliable date formatting across all environments
+                // This prevents browser/locale variations and ensures consistent display
+                return new Intl.DateTimeFormat('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true
+                }).format(date);
+            }
+
+            /**
+             * Create DOM element for a single screenshot
+             * SECURITY: Uses secure DOM creation instead of innerHTML to prevent XSS attacks
+             * @param {Object} screenshot - Screenshot object from API
+             * @returns {HTMLElement} Screenshot DOM element
+             */
+            createScreenshotElement(screenshot) {
+                const screenshotDiv = document.createElement('div');
+                screenshotDiv.className = 'screenshot';
+                
+                // Create anchor element with secure attribute setting
+                const link = document.createElement('a');
+                link.setAttribute('href', screenshot.url);
+                
+                // Create image element with secure attribute and text content setting
+                const img = document.createElement('img');
+                img.setAttribute('src', screenshot.url);
+                img.setAttribute('alt', `Screenshot from ${this.formatDate(screenshot.captured_at)}`);
+                img.setAttribute('loading', 'lazy');
+                
+                // Create screenshot info container
+                const infoDiv = document.createElement('div');
+                infoDiv.className = 'screenshot-info';
+                
+                // Create time span with secure text content
+                const timeSpan = document.createElement('span');
+                timeSpan.className = 'screenshot-time';
+                timeSpan.textContent = this.formatDate(screenshot.captured_at);
+                
+                // Create type span with secure text content and class setting
+                const typeSpan = document.createElement('span');
+                typeSpan.className = `screenshot-type ${screenshot.is_automatic ? 'type-auto' : 'type-manual'}`;
+                typeSpan.textContent = screenshot.is_automatic ? 'Automatic' : 'Manual';
+                
+                // Assemble elements using appendChild (secure DOM manipulation)
+                link.appendChild(img);
+                infoDiv.appendChild(timeSpan);
+                infoDiv.appendChild(typeSpan);
+                screenshotDiv.appendChild(link);
+                screenshotDiv.appendChild(infoDiv);
+                
+                return screenshotDiv;
+            }
+
+            /**
+             * Render the gallery with screenshots array
+             * @param {Array} screenshots - Array of screenshot objects
+             */
+            renderGallery(screenshots) {
+                // Clear existing content properly to prevent memory leaks
+                // Using removeChild() instead of innerHTML = '' ensures proper cleanup
+                // of event listeners and prevents memory leaks in long-running sessions
+                this.clearGalleryContainer();
+                
+                if (screenshots.length > 0) {
+                    const gallery = document.createElement('div');
+                    gallery.id = 'gallery';
+                    gallery.className = 'gallery';
+                    
+                    screenshots.forEach(screenshot => {
+                        gallery.appendChild(this.createScreenshotElement(screenshot));
+                    });
+                    
+                    this.galleryContainer.appendChild(gallery);
+                } else {
+                    this.renderEmptyState();
+                }
+            }
+
+            /**
+             * Properly clear gallery container to prevent memory leaks
+             * Uses removeChild() instead of innerHTML to ensure event listeners
+             * are properly cleaned up and memory is freed
+             */
+            clearGalleryContainer() {
+                // Remove all child elements one by one using removeChild()
+                // This ensures proper cleanup of event listeners and prevents memory leaks
+                while (this.galleryContainer.firstChild) {
+                    this.galleryContainer.removeChild(this.galleryContainer.firstChild);
+                }
+            }
+
+            /**
+             * Render empty state when no screenshots exist
+             * SECURITY: Uses secure DOM creation instead of innerHTML to prevent XSS attacks
+             */
+            renderEmptyState() {
+                const emptyState = document.createElement('div');
+                emptyState.id = 'emptyState';
+                emptyState.className = 'empty';
+                
+                // Create paragraphs with secure text content
+                const p1 = document.createElement('p');
+                p1.textContent = 'No screenshots yet.';
+                
+                const p2 = document.createElement('p');
+                p2.textContent = 'Screenshots will appear here as they are captured automatically or manually.';
+                
+                // Assemble elements using appendChild (secure DOM manipulation)
+                emptyState.appendChild(p1);
+                emptyState.appendChild(p2);
+                this.galleryContainer.appendChild(emptyState);
+            }
+
+            /**
+             * Public Methods - Main functionality
+             */
+            
+            /**
+             * Calculate exponential backoff delay
+             * @returns {number} Delay in milliseconds
+             */
+            calculateBackoffDelay() {
+                const delay = Math.min(
+                    BACKOFF_BASE_DELAY * Math.pow(2, this.consecutiveFailures),
+                    MAX_BACKOFF_DELAY
+                );
+                return delay + Math.random() * 1000; // Add jitter
+            }
+            
+            /**
+             * Reset error tracking when connection is restored
+             */
+            resetErrorTracking() {
+                this.consecutiveFailures = 0;
+                this.isCircuitBreakerOpen = false;
+                this.lastFailureTime = null;
+                this.backoffDelay = BACKOFF_BASE_DELAY;
+                this.updateConnectionStatus('connected');
+            }
+            
+            /**
+             * Handle refresh failure with circuit breaker pattern
+             * @param {Error} error - The error that occurred
+             * @param {boolean} isManualRefresh - Whether this was a manual refresh attempt
+             */
+            handleRefreshFailure(error, isManualRefresh = false) {
+                this.consecutiveFailures++;
+                this.lastFailureTime = Date.now();
+                this.backoffDelay = this.calculateBackoffDelay();
+                
+                console.error('Error refreshing gallery:', error);
+                
+                if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                    this.isCircuitBreakerOpen = true;
+                    this.stopAutoRefresh();
+                    this.updateConnectionStatus('disconnected');
+                    
+                    if (isManualRefresh) {
+                        this.showError(`Connection lost after ${MAX_CONSECUTIVE_FAILURES} attempts. Please check your internet connection.`);
+                    } else {
+                        this.showWarning('Auto-refresh disabled due to connection issues. Use manual refresh to retry.');
+                    }
+                } else {
+                    this.updateConnectionStatus('degraded');
+                    
+                    if (isManualRefresh) {
+                        this.showError(`Failed to refresh gallery: ${error.message}`);
+                    } else {
+                        // Show warning for auto-refresh failures but don't interrupt user
+                        console.warn(`Auto-refresh failed (${this.consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}):`, error.message);
+                    }
+                }
+            }
+            
+            /**
+             * Refresh gallery by fetching latest screenshots with comprehensive error handling
+             * @param {boolean} isManualRefresh - Whether this is a manual refresh attempt
+             */
+            async refreshGallery(isManualRefresh = false) {
+                // Check if circuit breaker is open
+                if (this.isCircuitBreakerOpen && !isManualRefresh) {
+                    return;
+                }
+                
+                try {
+                    const screenshots = await this.fetchScreenshots();
+                    this.renderGallery(screenshots);
+                    
+                    // Reset error tracking on successful refresh
+                    if (this.consecutiveFailures > 0) {
+                        this.resetErrorTracking();
+                        if (isManualRefresh) {
+                            this.showSuccess('Connection restored! Auto-refresh resumed.');
+                        }
+                        this.startAutoRefresh(); // Restart auto-refresh if it was stopped
+                    }
+                } catch (error) {
+                    this.handleRefreshFailure(error, isManualRefresh);
+                }
+            }
+
+            /**
+             * Handle manual refresh button click with deduplication
+             * Prevents rapid clicking and provides user feedback
+             */
+            async handleManualRefresh() {
+                // Check if refresh is already in progress
+                if (this.activeRequests.has('manualRefresh')) {
+                    console.log('Manual refresh already in progress, ignoring duplicate request');
+                    return;
+                }
+
+                this.hideMessages();
+                this.setManualRefreshButtonLoading(true);
+                this.activeRequests.add('manualRefresh');
+                
+                try {
+                    await this.refreshGallery(true);
+                } finally {
+                    this.setManualRefreshButtonLoading(false);
+                    this.activeRequests.delete('manualRefresh');
+                }
+            }
+            
+            /**
+             * Handle capture button click with deduplication and full error handling
+             * Prevents multiple concurrent capture requests
+             */
+            async handleCaptureClick() {
+                // Check if capture is already in progress
+                if (this.activeRequests.has('captureScreenshot')) {
+                    console.log('Screenshot capture already in progress, ignoring duplicate request');
+                    this.showWarning('Screenshot capture already in progress...');
+                    return;
+                }
+
+                this.hideMessages();
+                this.setCaptureButtonLoading(true);
+
+                try {
+                    await this.captureScreenshot();
+                    this.showSuccess('Screenshot captured successfully!');
+                    
+                    // Reset connection errors on successful capture
+                    if (this.consecutiveFailures > 0) {
+                        this.resetErrorTracking();
+                        this.startAutoRefresh();
+                    }
+                    
+                    // Refresh gallery to show new screenshot
+                    // Cache is already invalidated in captureScreenshot()
+                    await this.refreshGallery(true);
+                } catch (error) {
+                    console.error('Error capturing screenshot:', error);
+                    this.showError(error.message || 'Failed to capture screenshot');
+                    
+                    // Track capture failures for connection status
+                    this.handleRefreshFailure(error, true);
+                } finally {
+                    this.setCaptureButtonLoading(false);
+                }
+            }
+
+            /**
+             * Start auto-refresh timer for gallery updates with circuit breaker awareness
+             */
+            startAutoRefresh() {
+                // Don't start if circuit breaker is open
+                if (this.isCircuitBreakerOpen) {
+                    return;
+                }
+                
+                // Clear existing timer if any
+                this.stopAutoRefresh();
+                
+                // Calculate delay based on current failure state
+                const interval = this.consecutiveFailures > 0 ? 
+                    Math.max(AUTO_REFRESH_INTERVAL, this.backoffDelay) : 
+                    AUTO_REFRESH_INTERVAL;
+                
+                this.autoRefreshTimer = setInterval(() => {
+                    this.refreshGallery(false);
+                }, interval);
+            }
+
+            /**
+             * Stop auto-refresh timer (useful for cleanup)
+             */
+            stopAutoRefresh() {
+                if (this.autoRefreshTimer) {
+                    clearInterval(this.autoRefreshTimer);
+                    this.autoRefreshTimer = null;
+                }
+            }
+
+            /**
+             * Comprehensive cleanup method for resource management
+             * Ensures proper cleanup of all resources including caches and pending requests
+             */
+            cleanup() {
+                this.stopAutoRefresh();
+                this.requestManager.cleanup();
+                this.activeRequests.clear();
+            }
+
+            /**
+             * Get optimization statistics for debugging and monitoring
+             * @returns {Object} Comprehensive statistics about request optimization
+             */
+            getOptimizationStats() {
+                const stats = this.requestManager.getStats();
+                stats.activeRequests = this.activeRequests.size;
+                stats.connectionState = this.connectionState;
+                stats.consecutiveFailures = this.consecutiveFailures;
+                stats.isCircuitBreakerOpen = this.isCircuitBreakerOpen;
+                return stats;
+            }
+        }
+
+        // Initialize the gallery when DOM is ready
+        let galleryInstance = null;
+        document.addEventListener('DOMContentLoaded', () => {
+            galleryInstance = new ScreenshotGallery();
+            
+            // Expose optimization stats globally for debugging (development only)
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                window.getOptimizationStats = () => {
+                    if (galleryInstance) {
+                        const stats = galleryInstance.getOptimizationStats();
+                        console.table(stats.requests);
+                        console.log('Cache Stats:', stats.cache);
+                        console.log('Deduplication Stats:', stats.deduplication);
+                        console.log('Connection State:', stats.connectionState);
+                        console.log('Active Requests:', stats.activeRequests);
+                        return stats;
+                    }
+                    return null;
+                };
+                
+                console.log('Development mode: Use getOptimizationStats() to view request optimization statistics');
+            }
+        });
+    </script>
 </body>
 </html>
