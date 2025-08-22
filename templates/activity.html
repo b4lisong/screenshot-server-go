@@ -152,29 +152,6 @@
             display: none;
         }
         
-        .connection-status {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 500;
-            margin-left: 10px;
-        }
-        
-        .status-connected {
-            background-color: #e8f5e8;
-            color: #2e7d32;
-        }
-        
-        .status-disconnected {
-            background-color: #ffebee;
-            color: #c62828;
-        }
-        
-        .status-degraded {
-            background-color: #fff3cd;
-            color: #856404;
-        }
         
         .refresh-controls {
             margin: 10px 0;
@@ -215,9 +192,6 @@
     <div id="warningMessage" class="warning-message"></div>
     
     <div class="refresh-controls">
-        <span>Auto-refresh: 
-            <span id="connectionStatus" class="connection-status status-connected">Connected</span>
-        </span>
         <button id="manualRefreshBtn" class="manual-refresh-btn">Refresh Gallery</button>
     </div>
 
@@ -734,7 +708,6 @@
                 this.errorMessage = document.getElementById('errorMessage');
                 this.successMessage = document.getElementById('successMessage');
                 this.warningMessage = document.getElementById('warningMessage');
-                this.connectionStatus = document.getElementById('connectionStatus');
                 this.manualRefreshBtn = document.getElementById('manualRefreshBtn');
                 this.galleryContainer = document.getElementById('galleryContainer');
                 this.autoRefreshTimer = null;
@@ -908,32 +881,6 @@
                 this.manualRefreshBtn.textContent = isLoading ? 'Refreshing...' : 'Refresh Gallery';
             }
             
-            /**
-             * Update connection status indicator
-             * @param {string} state - Connection state: 'connected', 'degraded', 'disconnected'
-             */
-            updateConnectionStatus(state) {
-                this.connectionState = state;
-                this.connectionStatus.className = 'connection-status';
-                
-                switch (state) {
-                    case 'connected':
-                        this.connectionStatus.classList.add('status-connected');
-                        this.connectionStatus.textContent = 'Connected';
-                        this.manualRefreshBtn.style.display = 'none';
-                        break;
-                    case 'degraded':
-                        this.connectionStatus.classList.add('status-degraded');
-                        this.connectionStatus.textContent = 'Connection Issues';
-                        this.manualRefreshBtn.style.display = 'inline-block';
-                        break;
-                    case 'disconnected':
-                        this.connectionStatus.classList.add('status-disconnected');
-                        this.connectionStatus.textContent = 'Disconnected';
-                        this.manualRefreshBtn.style.display = 'inline-block';
-                        break;
-                }
-            }
 
             /**
              * DOM Manipulation Methods
@@ -1087,7 +1034,7 @@
                 this.isCircuitBreakerOpen = false;
                 this.lastFailureTime = null;
                 this.backoffDelay = BACKOFF_BASE_DELAY;
-                this.updateConnectionStatus('connected');
+                this.manualRefreshBtn.style.display = 'none';
             }
             
             /**
@@ -1105,7 +1052,7 @@
                 if (this.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
                     this.isCircuitBreakerOpen = true;
                     this.stopAutoRefresh();
-                    this.updateConnectionStatus('disconnected');
+                    this.manualRefreshBtn.style.display = 'inline-block';
                     
                     if (isManualRefresh) {
                         this.showError(`Connection lost after ${MAX_CONSECUTIVE_FAILURES} attempts. Please check your internet connection.`);
@@ -1113,7 +1060,7 @@
                         this.showWarning('Auto-refresh disabled due to connection issues. Use manual refresh to retry.');
                     }
                 } else {
-                    this.updateConnectionStatus('degraded');
+                    this.manualRefreshBtn.style.display = 'inline-block';
                     
                     if (isManualRefresh) {
                         this.showError(`Failed to refresh gallery: ${error.message}`);
