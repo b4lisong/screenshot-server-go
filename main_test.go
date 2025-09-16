@@ -11,6 +11,7 @@ import (
 
 	"github.com/b4lisong/screenshot-server-go/config"
 	"github.com/b4lisong/screenshot-server-go/email"
+	"github.com/b4lisong/screenshot-server-go/healthcheck"
 	"github.com/b4lisong/screenshot-server-go/scheduler"
 	"github.com/b4lisong/screenshot-server-go/screenshot"
 	"github.com/b4lisong/screenshot-server-go/storage"
@@ -57,8 +58,18 @@ func TestActivityHandler(t *testing.T) {
 		Version:    "test",
 	})
 
+	// Create mock healthcheck monitor
+	healthcheckConfig, err := healthcheck.NewConfig(cfg)
+	if err != nil {
+		t.Fatalf("creating healthcheck config: %v", err)
+	}
+	mockHealthMonitor, err := healthcheck.NewMonitor(healthcheckConfig)
+	if err != nil {
+		t.Fatalf("creating healthcheck monitor: %v", err)
+	}
+
 	// Create server instance
-	server := NewServer(manager, templates, mockScheduler, cfg, mailer, dailyScheduler)
+	server := NewServer(manager, templates, mockScheduler, cfg, mailer, dailyScheduler, mockHealthMonitor)
 
 	// Save some test screenshots
 	testImg := image.NewRGBA(image.Rect(0, 0, 100, 100))
@@ -135,8 +146,18 @@ func TestScreenshotImageHandler(t *testing.T) {
 		Version:    "test",
 	})
 
+	// Create mock healthcheck monitor
+	healthcheckConfig, err := healthcheck.NewConfig(cfg)
+	if err != nil {
+		t.Fatalf("creating healthcheck config: %v", err)
+	}
+	mockHealthMonitor, err := healthcheck.NewMonitor(healthcheckConfig)
+	if err != nil {
+		t.Fatalf("creating healthcheck monitor: %v", err)
+	}
+
 	// Create server instance
-	server := NewServer(manager, nil, mockScheduler, cfg, mailer, dailyScheduler)
+	server := NewServer(manager, nil, mockScheduler, cfg, mailer, dailyScheduler, mockHealthMonitor)
 
 	testImg := image.NewRGBA(image.Rect(0, 0, 100, 100))
 	screenshot, err := manager.Save(testImg, false)

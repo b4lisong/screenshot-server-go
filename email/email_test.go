@@ -345,10 +345,10 @@ func TestZipAttachmentDetection(t *testing.T) {
 		if !summary.HasAttachment {
 			t.Errorf("Screenshot %d should be marked as attached in ZIP strategy", i+1)
 		}
-		
+
 		expectedCompressedSize := int64(300 / 3) // 300KB ZIP / 3 screenshots = 100KB per screenshot
 		if summary.CompressedSizeKB != expectedCompressedSize {
-			t.Errorf("Screenshot %d: expected compressed size %d KB, got %d KB", 
+			t.Errorf("Screenshot %d: expected compressed size %d KB, got %d KB",
 				i+1, expectedCompressedSize, summary.CompressedSizeKB)
 		}
 	}

@@ -6,6 +6,7 @@ import (
 	"net/mail"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -30,6 +31,9 @@ type Config struct {
 
 	// Email configuration
 	Email EmailConfig `yaml:"email"`
+
+	// Healthcheck configuration
+	Healthcheck HealthcheckConfig `yaml:"healthcheck"`
 }
 
 // EmailConfig represents SMTP email notification configuration.
@@ -83,6 +87,27 @@ type AttachmentConfig struct {
 	Strategy string `yaml:"strategy"` // "individual", "zip", "adaptive"
 }
 
+// HealthcheckConfig represents configuration for healthcheck ping monitoring.
+type HealthcheckConfig struct {
+	// Enable/disable healthcheck pings
+	Enabled bool `yaml:"enabled"`
+
+	// URL to ping for health monitoring
+	PingURL string `yaml:"ping_url"`
+
+	// Interval between health pings
+	Interval time.Duration `yaml:"interval"`
+
+	// Timeout for each health ping request
+	Timeout time.Duration `yaml:"timeout"`
+
+	// Maximum number of retries for failed pings
+	MaxRetries int `yaml:"max_retries"`
+
+	// User agent string for HTTP requests
+	UserAgent string `yaml:"user_agent"`
+}
+
 // Default returns a configuration with default values.
 func Default() *Config {
 	return &Config{
@@ -113,6 +138,14 @@ func Default() *Config {
 				ResizeMaxHeight:     1080,
 				Strategy:            "adaptive",
 			},
+		},
+		Healthcheck: HealthcheckConfig{
+			Enabled:    false,
+			PingURL:    "",
+			Interval:   5 * time.Minute,
+			Timeout:    30 * time.Second,
+			MaxRetries: 3,
+			UserAgent:  "Screenshot-Server-Go/1.0",
 		},
 	}
 }
@@ -200,6 +233,13 @@ func (c *Config) Validate() error {
 			if err := c.validateAttachmentConfig(); err != nil {
 				return fmt.Errorf("invalid attachment configuration: %w", err)
 			}
+		}
+	}
+
+	// Validate healthcheck configuration if enabled
+	if c.Healthcheck.Enabled {
+		if err := c.validateHealthcheckConfig(); err != nil {
+			return fmt.Errorf("invalid healthcheck configuration: %w", err)
 		}
 	}
 
@@ -346,6 +386,50 @@ func (c *Config) validateAttachmentConfig() error {
 	}
 	if !validStrategies[c.Email.Attachments.Strategy] {
 		return fmt.Errorf("invalid strategy: %s (must be one of: individual, zip, adaptive)", c.Email.Attachments.Strategy)
+	}
+
+	return nil
+}
+
+// validateHealthcheckConfig validates healthcheck configuration settings.
+func (c *Config) validateHealthcheckConfig() error {
+	// Validate ping URL format if provided
+	if c.Healthcheck.PingURL == "" {
+		return fmt.Errorf("ping_url cannot be empty when healthcheck is enabled")
+	}
+
+	// Basic URL validation - must be HTTPS for security
+	if !strings.HasPrefix(c.Healthcheck.PingURL, "https://") {
+		return fmt.Errorf("ping_url must use HTTPS protocol for security")
+	}
+
+	// Validate interval
+	if c.Healthcheck.Interval <= 0 {
+		return fmt.Errorf("interval must be positive, got %v", c.Healthcheck.Interval)
+	}
+	if c.Healthcheck.Interval < 30*time.Second {
+		return fmt.Errorf("interval must be at least 30 seconds to avoid excessive requests, got %v", c.Healthcheck.Interval)
+	}
+
+	// Validate timeout
+	if c.Healthcheck.Timeout <= 0 {
+		return fmt.Errorf("timeout must be positive, got %v", c.Healthcheck.Timeout)
+	}
+	if c.Healthcheck.Timeout >= c.Healthcheck.Interval {
+		return fmt.Errorf("timeout (%v) must be less than interval (%v)", c.Healthcheck.Timeout, c.Healthcheck.Interval)
+	}
+
+	// Validate max retries
+	if c.Healthcheck.MaxRetries < 0 {
+		return fmt.Errorf("max_retries must be non-negative, got %d", c.Healthcheck.MaxRetries)
+	}
+	if c.Healthcheck.MaxRetries > 10 {
+		return fmt.Errorf("max_retries must be at most 10 to avoid excessive load, got %d", c.Healthcheck.MaxRetries)
+	}
+
+	// Validate user agent
+	if c.Healthcheck.UserAgent == "" {
+		return fmt.Errorf("user_agent cannot be empty")
 	}
 
 	return nil

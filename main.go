@@ -17,6 +17,7 @@ import (
 
 	"github.com/b4lisong/screenshot-server-go/config"
 	"github.com/b4lisong/screenshot-server-go/email"
+	"github.com/b4lisong/screenshot-server-go/healthcheck"
 	"github.com/b4lisong/screenshot-server-go/scheduler"
 	"github.com/b4lisong/screenshot-server-go/screenshot"
 	"github.com/b4lisong/screenshot-server-go/storage"
@@ -31,6 +32,7 @@ type Server struct {
 	config         *config.Config
 	mailer         *email.Mailer
 	dailyScheduler *email.DailySummaryScheduler
+	healthMonitor  *healthcheck.Monitor
 }
 
 // ScreenshotResponse represents the JSON response for screenshot API endpoints
@@ -48,7 +50,7 @@ type ErrorResponse struct {
 }
 
 // NewServer creates a new Server instance with all dependencies.
-func NewServer(manager *storage.Manager, templates *template.Template, scheduler *scheduler.Scheduler, config *config.Config, mailer *email.Mailer, dailyScheduler *email.DailySummaryScheduler) *Server {
+func NewServer(manager *storage.Manager, templates *template.Template, scheduler *scheduler.Scheduler, config *config.Config, mailer *email.Mailer, dailyScheduler *email.DailySummaryScheduler, healthMonitor *healthcheck.Monitor) *Server {
 	return &Server{
 		manager:        manager,
 		templates:      templates,
@@ -56,6 +58,7 @@ func NewServer(manager *storage.Manager, templates *template.Template, scheduler
 		config:         config,
 		mailer:         mailer,
 		dailyScheduler: dailyScheduler,
+		healthMonitor:  healthMonitor,
 	}
 }
 
@@ -148,8 +151,24 @@ func main() {
 	}
 	defer dailyScheduler.Stop()
 
+	// Initialize healthcheck monitor
+	healthcheckConfig, err := healthcheck.NewConfig(cfg)
+	if err != nil {
+		log.Fatalf("Failed to create healthcheck config: %v", err)
+	}
+
+	healthMonitor, err := healthcheck.NewMonitor(healthcheckConfig)
+	if err != nil {
+		log.Fatalf("Failed to create healthcheck monitor: %v", err)
+	}
+
+	if err := healthMonitor.Start(); err != nil {
+		log.Fatalf("Failed to start healthcheck monitor: %v", err)
+	}
+	defer healthMonitor.Stop()
+
 	// Create server with dependencies
-	server := NewServer(manager, templates, sched, cfg, mailer, dailyScheduler)
+	server := NewServer(manager, templates, sched, cfg, mailer, dailyScheduler, healthMonitor)
 
 	// Start cleanup routine
 	server.startCleanupRoutine()

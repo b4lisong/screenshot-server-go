@@ -1,0 +1,55 @@
+# Screenshot Server Configuration Example
+# Copy this file to config.yaml and modify as needed
+
+# Server configuration
+port: 8080
+
+# Storage configuration
+storage_dir: "./screenshots"
+cleanup_interval: "1h"
+retention_period: "168h"  # 7 days
+
+# Frontend configuration
+auto_refresh_interval: "30s"
+max_failures: 3
+
+# Logging configuration
+log_level: "info"
+
+# Email configuration (optional)
+email:
+  enabled: false
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  smtp_username: "your-email@gmail.com"
+  smtp_password: "your-app-password"
+  smtp_security: "starttls"
+  from_email: "your-email@gmail.com"
+  to_emails:
+    - "recipient@example.com"
+  subject_prefix: "[Screenshot Server]"
+  server_start: true
+  server_stop: true
+  daily_summary: true
+  summary_time: "09:00"
+  summary_timezone: "Local"
+  attachments:
+    enabled: true
+    compression_quality: 75
+    max_attachment_size_mb: 5.0
+    max_total_size_mb: 20.0
+    max_screenshots: 10
+    resize_max_width: 1920
+    resize_max_height: 1080
+    strategy: "adaptive"
+
+# Healthcheck configuration (optional)
+healthcheck:
+  enabled: false
+  ping_url: "https://your-monitoring-service.com/ping"
+  # Alternative using environment variable:
+  # ping_url: "${HEALTHCHECK_PING_URL}"
+  interval: "5m"
+  timeout: "30s"
+  max_retries: 3
+  user_agent: "Screenshot-Server-Go/1.0"
