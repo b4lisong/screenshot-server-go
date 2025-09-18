@@ -412,7 +412,7 @@ func (m *Mailer) processIndividualAttachments(screenshotPaths []string) (*Attach
 			continue
 		}
 
-		filename := m.generateAttachmentFilename(nil, i) + ".jpg"
+		filename := m.generateAttachmentFilename(nil, i)
 		if i < len(screenshotPaths) {
 			base := filepath.Base(screenshotPaths[i])
 			ext := filepath.Ext(base)
@@ -553,12 +553,12 @@ func (m *Mailer) generateAttachmentFilename(screenshot *storage.Screenshot, inde
 		base := filepath.Base(screenshot.Path)
 		ext := filepath.Ext(base)
 		name := base[:len(base)-len(ext)]
-		return name + "_compressed"
+		return name + "_compressed.jpg"
 	}
 
 	// Fallback to index-based naming
 	timestamp := time.Now().Format("20060102_150405")
-	return fmt.Sprintf("screenshot_%s_%d", timestamp, index)
+	return fmt.Sprintf("screenshot_%s_%d.jpg", timestamp, index)
 }
 
 // getEmailTemplates returns the embedded email templates.
